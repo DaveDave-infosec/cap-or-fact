@@ -1230,9 +1230,14 @@ async function searchWeb(query, limit = 4) {
   while ((match = pattern.exec(html)) && results.length < limit) {
     const url = resolveDuckDuckGoUrl(match[1]);
     const title = cleanHtmlText(match[2]);
+    const nearbyHtml = html.slice(pattern.lastIndex, pattern.lastIndex + 1800);
+    const snippetMatch =
+      nearbyHtml.match(/class="result__snippet"[^>]*>(.*?)<\/a>/is) ||
+      nearbyHtml.match(/class="result__snippet"[^>]*>(.*?)<\/div>/is);
+    const snippet = snippetMatch ? cleanHtmlText(snippetMatch[1]) : "";
 
     if (url && title) {
-      results.push({ title, url });
+      results.push({ title, url, snippet });
     }
   }
 
@@ -1388,6 +1393,131 @@ function claimKeywords(claim) {
     .slice(0, 8);
 }
 
+function isLikelyPersonName(name, projectName) {
+  const cleanName = String(name || "").replace(/\s+/g, " ").trim();
+  const lowerName = cleanName.toLowerCase();
+  const compactName = compactIdentityText(cleanName);
+  const compactProject = compactIdentityText(projectName);
+  const blockedParts = new Set([
+    "about",
+    "blog",
+    "capital",
+    "crypto",
+    "foundation",
+    "founder",
+    "founders",
+    "github",
+    "google",
+    "labs",
+    "linkedin",
+    "medium",
+    "network",
+    "news",
+    "official",
+    "protocol",
+    "search",
+    "team",
+    "twitter",
+    "website",
+    "wikipedia",
+  ]);
+
+  if (!cleanName || cleanName.split(" ").length < 2 || cleanName.split(" ").length > 4) {
+    return false;
+  }
+
+  if (compactProject && compactName.includes(compactProject)) {
+    return false;
+  }
+
+  return cleanName
+    .split(" ")
+    .every((part) => part.length > 1 && !blockedParts.has(part.toLowerCase()) && /^[A-Z][A-Za-z.'-]*$/.test(part));
+}
+
+function addFounderNameLead(leads, name, score, source) {
+  const cleanName = String(name || "").replace(/\s+/g, " ").trim();
+  const key = compactIdentityText(cleanName);
+
+  if (!key) {
+    return;
+  }
+
+  const existing = leads.get(key);
+
+  if (!existing || existing.score < score) {
+    leads.set(key, {
+      name: cleanName,
+      score,
+      source,
+    });
+  }
+}
+
+function extractFounderNamesFromText(text, projectName, source = "web result") {
+  const leads = new Map();
+  const normalized = String(text || "")
+    .replace(/\s+/g, " ")
+    .replace(/[()]/g, " ")
+    .trim();
+  const projectLower = String(projectName || "").toLowerCase();
+  const chunks = normalized.split(/(?:[.!?;]| - |\|)/).filter(Boolean);
+  const founderTerms = /\b(founder|founders|cofounder|cofounders|co-founder|co-founders|founded|ceo|team)\b/i;
+  const namePattern = /\b([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){1,3})\b/g;
+
+  chunks.forEach((chunk) => {
+    const lowerChunk = chunk.toLowerCase();
+    const hasFounderSignal = founderTerms.test(chunk);
+    const hasProjectSignal = projectLower && lowerChunk.includes(projectLower);
+
+    if (!hasFounderSignal && !hasProjectSignal) {
+      return;
+    }
+
+    const score = (hasFounderSignal ? 60 : 30) + (hasProjectSignal ? 20 : 0);
+    const matches = [...chunk.matchAll(namePattern)];
+
+    matches.forEach((match) => {
+      const rawName = match[1].replace(/\b(?:Founder|Founders|CEO|Team)\b/g, "").trim();
+
+      if (isLikelyPersonName(rawName, projectName)) {
+        addFounderNameLead(leads, rawName, score, source);
+      }
+    });
+  });
+
+  return [...leads.values()];
+}
+
+async function discoverFounderNameLeads(projectName) {
+  const cleanProjectName = String(projectName || "").trim();
+
+  if (!cleanProjectName) {
+    return [];
+  }
+
+  const queries = [
+    `${cleanProjectName} founders`,
+    `${cleanProjectName} founder`,
+    `${cleanProjectName} cofounder`,
+    `${cleanProjectName} team founder`,
+  ];
+  const leads = new Map();
+
+  for (const query of queries) {
+    const results = await searchWeb(query, 4);
+
+    results.forEach((result) => {
+      const text = `${result.title || ""}. ${result.snippet || ""}`;
+      extractFounderNamesFromText(text, cleanProjectName, result.url).forEach((lead) => {
+        addFounderNameLead(leads, lead.name, lead.score, lead.source);
+      });
+    });
+  }
+
+  return [...leads.values()].sort((a, b) => b.score - a.score).slice(0, 4);
+}
+
 function isFounderLikeUser(user, projectName) {
   const haystack = `${user.name || ""} ${user.username || ""} ${user.description || ""}`.toLowerCase();
   const normalizedProject = String(projectName || "").toLowerCase();
@@ -1413,28 +1543,44 @@ function isLikelyOfficialProjectUser(user, projectName) {
   return Boolean(hasProjectName && officialSignal);
 }
 
-function scoreXUserCandidate(user, projectName) {
+function getFounderLeadMatch(user, founderNameLeads = []) {
+  const compactProfile = compactIdentityText(`${user.name || ""} ${user.username || ""}`);
+
+  return founderNameLeads.find((lead) => {
+    const compactLead = compactIdentityText(lead.name);
+    return compactLead && compactProfile.includes(compactLead);
+  }) || null;
+}
+
+function scoreXUserCandidate(user, projectName, founderNameLeads = []) {
   let score = 0;
   const haystack = `${user.name || ""} ${user.username || ""} ${user.description || ""}`.toLowerCase();
   const compactProject = compactIdentityText(projectName);
   const compactProfile = compactIdentityText(`${user.name || ""} ${user.username || ""}`);
+  const founderLeadMatch = getFounderLeadMatch(user, founderNameLeads);
 
   if (compactProject && compactProfile.includes(compactProject)) score += 36;
   if (projectName && haystack.includes(String(projectName).toLowerCase())) score += 34;
+  if (founderLeadMatch) score += 72;
   if (/\b(founder|cofounder|co-founder|ceo|creator)\b/.test(haystack)) score += 46;
   if (/\b(official|foundation|protocol|network|labs)\b/.test(haystack)) score += 24;
-  if (user.verified || user.verified_type) score += 10;
+  if (user.verified || user.verified_type) score += 22;
 
   return score;
 }
 
-async function searchXUserCandidates(projectName) {
+async function searchXUserCandidates(projectName, founderNameLeads = []) {
   const queries = [
     `${projectName} founder`,
     `${projectName} cofounder`,
     `${projectName} co-founder`,
     `${projectName} CEO`,
     `${projectName} official`,
+    ...founderNameLeads.flatMap((lead) => [
+      `${lead.name}`,
+      `${lead.name} ${projectName}`,
+      `${lead.name} founder ${projectName}`,
+    ]),
   ];
   const byUsername = new Map();
 
@@ -1455,7 +1601,8 @@ async function searchXUserCandidates(projectName) {
           return;
         }
 
-        const score = scoreXUserCandidate(user, projectName);
+        const founderLeadMatch = getFounderLeadMatch(user, founderNameLeads);
+        const score = scoreXUserCandidate(user, projectName, founderNameLeads);
 
         if (score < 58) {
           return;
@@ -1465,11 +1612,16 @@ async function searchXUserCandidates(projectName) {
         const candidate = {
           user,
           score,
-          kind: isFounderLikeUser(user, projectName)
+          kind: isFounderLikeUser(user, projectName) ||
+            (founderLeadMatch &&
+              (Boolean(user.verified || user.verified_type) ||
+                String(user.description || "").toLowerCase().includes(String(projectName || "").toLowerCase()) ||
+                /\b(founder|cofounder|co-founder|ceo|creator)\b/i.test(user.description || "")))
             ? "founder"
             : isLikelyOfficialProjectUser(user, projectName)
               ? "official"
               : "candidate",
+          leadName: founderLeadMatch ? founderLeadMatch.name : "",
           query,
         };
 
@@ -1555,6 +1707,7 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
   const foundReceipts = [];
   const trustedHandles = new Map();
   const candidateHandles = new Set();
+  const founderNameLeads = await discoverFounderNameLeads(projectName);
 
   function addProfileCandidate(name, username, url, reason) {
     const normalizedUsername = String(username || "").toLowerCase();
@@ -1588,7 +1741,7 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
       trustedHandles.set(handle.toLowerCase(), "official");
     }
   });
-  const profileCandidates = await searchXUserCandidates(projectName);
+  const profileCandidates = await searchXUserCandidates(projectName, founderNameLeads);
 
   profileCandidates.forEach((candidate) => {
     const username = String(candidate.user.username || "").toLowerCase();
@@ -1605,7 +1758,9 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
       candidate.user.username,
       profileUrl,
       candidate.kind === "founder"
-        ? "X user search found a founder-like profile linked to the project."
+        ? candidate.leadName
+          ? `Web founder search found ${candidate.leadName}; X matched this profile.`
+          : "X user search found a founder-like profile linked to the project."
         : "X user search found an official-looking project profile.",
     );
 
@@ -1622,7 +1777,9 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
     if (profileReceipt) {
       profileReceipt.reason =
         candidate.kind === "founder"
-          ? "X user search found a founder-like profile linked to the project."
+          ? candidate.leadName
+            ? `Web founder search found ${candidate.leadName}; X matched this profile.`
+            : "X user search found a founder-like profile linked to the project."
           : "X user search found an official-looking project profile.";
     }
 
