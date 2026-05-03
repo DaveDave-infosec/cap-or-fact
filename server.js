@@ -996,6 +996,7 @@ function makeFounderScout(research, category) {
   );
   const officialX = receipts.find((receipt) => receipt.type === "x");
   const claimReceipt = research.genlayerReceipt || null;
+  const candidates = ((research.xScout && research.xScout.candidates) || []).slice(0, 3);
   const hasKnownFounder = Boolean((founderReceipt && !founderReceipt.discoveryOnly) || founderPost);
   const candidateRoute = founderReceipt || founderPost || founderSearch || officialX || null;
 
@@ -1025,6 +1026,7 @@ function makeFounderScout(research, category) {
   return {
     mode,
     summary,
+    candidates,
     stages: [
       {
         label: "Project identity",

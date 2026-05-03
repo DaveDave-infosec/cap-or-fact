@@ -1313,6 +1313,7 @@ function makeFounderScout(research, category) {
   );
   const officialX = findReceipt(receipts, (receipt) => receipt.type === "x");
   const claimReceipt = research.genlayerReceipt || null;
+  const candidates = ((research.xScout && research.xScout.candidates) || []).slice(0, 3);
   const hasKnownFounder = Boolean((founderReceipt && !founderReceipt.discoveryOnly) || founderPost);
   const candidateRoute = founderReceipt || founderPost || founderSearch || officialX || null;
 
@@ -1378,7 +1379,7 @@ function makeFounderScout(research, category) {
     summary = "Founder/source candidates are prepared. Verify identity, then find the exact claim receipt.";
   }
 
-  return { mode, summary, stages };
+  return { mode, summary, stages, candidates };
 }
 
 function normalizeResearch(research, category) {
@@ -1685,6 +1686,11 @@ function renderFounderScout(research) {
   const status = document.querySelector("#founder-scout-status");
   const list = document.querySelector("#founder-scout-list");
   const scout = research.founderScout;
+  const oldCandidates = box.querySelector(".founder-candidates");
+
+  if (oldCandidates) {
+    oldCandidates.remove();
+  }
 
   if (!scout) {
     box.hidden = true;
@@ -1714,6 +1720,34 @@ function renderFounderScout(research) {
     item.append(marker, body);
     list.append(item);
   });
+
+  if (scout.candidates && scout.candidates.length > 0) {
+    const candidates = document.createElement("div");
+    const title = document.createElement("strong");
+    const helper = document.createElement("p");
+    const candidateList = document.createElement("ul");
+
+    candidates.className = "founder-candidates";
+    title.textContent = "Profile Candidates";
+    helper.textContent = "Temporary crawler tuning view. These profiles are not proof until a specific post is found.";
+
+    scout.candidates.forEach((candidate) => {
+      const item = document.createElement("li");
+      const link = document.createElement("a");
+      const note = document.createElement("span");
+
+      link.href = candidate.url;
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      link.textContent = `${candidate.name || "Unknown"} @${candidate.username || "unknown"}`;
+      note.textContent = candidate.reason || "Crawler marked this as a possible profile candidate.";
+      item.append(link, note);
+      candidateList.append(item);
+    });
+
+    candidates.append(title, helper, candidateList);
+    box.append(candidates);
+  }
 }
 
 function renderClaimQuality(quality) {
