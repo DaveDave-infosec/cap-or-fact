@@ -215,6 +215,29 @@ Builder app:
 http://localhost:4173?builder=true
 ```
 
+## Deploy
+
+The simplest production deploy is Render.
+
+1. Push this repo to GitHub.
+2. Go to Render and create a new Web Service from the repo.
+3. Use:
+
+```text
+Build command: leave empty
+Start command: node server.js
+Health check: /api/health
+```
+
+The included `render.yaml` has the same settings for blueprint-style deploys.
+
+After deploy:
+
+```text
+Public app: https://your-render-url
+Builder mode: https://your-render-url?builder=true
+```
+
 ## Files
 
 - `app/index.html` - app shell.
