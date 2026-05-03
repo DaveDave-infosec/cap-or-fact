@@ -556,7 +556,7 @@ const founderXByProject = {
       name: "Orkun Kilic",
       title: "Orkun founder X",
       url: "https://x.com/0x_orkun",
-      aliases: ["orkun", "orkun kilic", "orkun kılıç", "0x_orkun"],
+      aliases: ["orkun", "orkun kilic", "0x_orkun"],
     },
   ],
 };
@@ -585,6 +585,25 @@ function getFounderReceipts(project, claim, category) {
     priority: 104,
     reason: `Founder claim detected. ${founder.name}'s X account is the primary place to verify direct comments or replies.`,
   }));
+}
+
+function projectHasFounderMapping(project) {
+  return Boolean(project && founderXByProject[project.id] && founderXByProject[project.id].length > 0);
+}
+
+function getFounderDiscoveryProjectName(claim, projectId, quality) {
+  const selectedProject = findProjectById(projectId);
+  const detectedProject = selectedProject || findProject(claim);
+
+  if (detectedProject && projectHasFounderMapping(detectedProject)) {
+    return "";
+  }
+
+  if (detectedProject) {
+    return detectedProject.name;
+  }
+
+  return quality.likelyProjectName || extractLikelyProjectName(claim);
 }
 
 function getProjectReceipts(project, claim = "", category = "") {
@@ -1825,13 +1844,17 @@ async function runScout() {
   const category = document.querySelector("#category").value;
   const defaultText = "Scout Claim";
   const quality = analyzeClaimQuality(claim, projectId, category);
+  const founderDiscoveryProjectName = isFounderClaim(claim, category)
+    ? getFounderDiscoveryProjectName(claim, projectId, quality)
+    : "";
 
-  if (quality.level === "discovery" && quality.likelyProjectName) {
+  if (founderDiscoveryProjectName || (quality.level === "discovery" && quality.likelyProjectName)) {
+    const discoveryProjectName = founderDiscoveryProjectName || quality.likelyProjectName;
     previewButton.disabled = true;
     previewButton.textContent = "Discovering";
 
     try {
-      const research = await discoverWithBackend(claim, category, quality.likelyProjectName);
+      const research = await discoverWithBackend(claim, category, discoveryProjectName);
       activeScout = { claim, projectId, category, research };
       const data = readForm();
       const preview = previewCase(data);

@@ -129,6 +129,8 @@ Likely project: Noya. Verifying official sources before GenLayer can judge this 
 
 CryptoRank is prioritized for early-stage and pre-token projects because CoinGecko and CoinMarketCap usually focus more on tokenized projects.
 
+Founder-related claims trigger a stronger live discovery path. The scout searches for founder/team/X sources first, then falls back to official project X, website, blog, docs, and GitHub. Known founder accounts can still be cached for faster demos, but the production path does not depend on manually registering every founder.
+
 Project selection is separate from Claim Type. That means a user can choose:
 
 ```text

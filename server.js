@@ -631,7 +631,7 @@ const founderXByProject = {
       name: "Orkun Kilic",
       title: "Orkun founder X",
       url: "https://x.com/0x_orkun",
-      aliases: ["orkun", "orkun kilic", "orkun kılıç", "0x_orkun"],
+      aliases: ["orkun", "orkun kilic", "0x_orkun"],
     },
   ],
 };
@@ -1121,6 +1121,21 @@ function classifyDiscoveredUrl(url) {
   return "official";
 }
 
+function classifyDiscoveredResult(title, url, query, category) {
+  const discoveredType = classifyDiscoveredUrl(url);
+  const haystack = `${title || ""} ${url || ""} ${query || ""}`.toLowerCase();
+
+  if (
+    category === "founder_statement" &&
+    discoveredType === "x" &&
+    /\b(founder|cofounder|co-founder|ceo|team|twitter|x account)\b/.test(haystack)
+  ) {
+    return "founder_x";
+  }
+
+  return discoveredType;
+}
+
 function addDiscoveredReceipt(receipts, seenUrls, title, url, sourceType, priority = 60, discoveryOnly = false) {
   const normalizedUrl = String(url || "").trim();
   const dedupeKey = normalizedUrl.replace(/\/$/, "").toLowerCase();
@@ -1190,7 +1205,14 @@ async function discoverProjectSources(claim, category, projectName) {
     const results = await searchWeb(query, 3);
 
     results.forEach((result) => {
-      addDiscoveredReceipt(receipts, seenUrls, result.title || `${cleanProjectName} source`, result.url, classifyDiscoveredUrl(result.url), priority);
+      addDiscoveredReceipt(
+        receipts,
+        seenUrls,
+        result.title || `${cleanProjectName} source`,
+        result.url,
+        classifyDiscoveredResult(result.title, result.url, query, category),
+        priority,
+      );
     });
   }
 

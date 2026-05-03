@@ -638,7 +638,7 @@ FOUNDER_X_BY_PROJECT = {
             "name": "Orkun Kilic",
             "title": "Orkun founder X",
             "url": "https://x.com/0x_orkun",
-            "aliases": ["orkun", "orkun kilic", "orkun kılıç", "0x_orkun"],
+            "aliases": ["orkun", "orkun kilic", "0x_orkun"],
         }
     ]
 }
@@ -1127,6 +1127,19 @@ def classify_discovered_url(url):
     return "official"
 
 
+def classify_discovered_result(title, url, query, category):
+    discovered_type = classify_discovered_url(url)
+    haystack = f"{title or ''} {url or ''} {query or ''}".lower()
+
+    if category == "founder_statement" and discovered_type == "x" and re.search(
+        r"\b(founder|cofounder|co-founder|ceo|team|twitter|x account)\b",
+        haystack,
+    ):
+        return "founder_x"
+
+    return discovered_type
+
+
 def make_discovered_receipt(title, url, source_type=None, priority=60, discovery_only=False):
     return {
         "title": title,
@@ -1196,7 +1209,7 @@ def discover_project_sources(claim, category, project_name):
 
     for query, priority in search_plan:
         for result in search_web(query, limit=3):
-            source_type = classify_discovered_url(result["url"])
+            source_type = classify_discovered_result(result["title"], result["url"], query, category)
             title = result["title"] or f"{project_name} source"
             add_discovered_receipt(receipts, seen_urls, title, result["url"], source_type, priority)
 
