@@ -1013,11 +1013,102 @@ def make_scout_status(project, category, best_receipt, genlayer_receipt):
     return f"Picked {best_receipt['title']} as the strongest signal. GenLayer will fetch {genlayer_receipt['title']}."
 
 
+def make_founder_scout(research, category):
+    if category != "founder_statement":
+        return None
+
+    receipts = research.get("receipts", [])
+    project_name = research.get("projectName", "")
+    identity_receipt = next((receipt for receipt in receipts if receipt["type"] == "directory"), None)
+    if not identity_receipt:
+        identity_receipt = next(
+            (receipt for receipt in receipts if receipt["type"] in ["official", "docs", "blog", "github"]),
+            None,
+        )
+    founder_receipt = next((receipt for receipt in receipts if receipt["type"] == "founder_x"), None)
+    founder_search = next(
+        (
+            receipt
+            for receipt in receipts
+            if receipt["type"] == "search" and "founder" in receipt["title"].lower()
+        ),
+        None,
+    )
+    official_x = next((receipt for receipt in receipts if receipt["type"] == "x"), None)
+    claim_receipt = research.get("genlayerReceipt")
+    has_known_founder = bool(founder_receipt and not founder_receipt.get("discoveryOnly"))
+    candidate_route = founder_receipt or founder_search or official_x
+
+    mode = "x-first scout"
+    summary = "Founder claims need a verified founder or official X receipt before GenLayer judges."
+
+    if research.get("awaitingScout"):
+        mode = "waiting"
+        summary = "Click Scout Claim to prepare founder identity and claim-receipt checks."
+    elif claim_receipt:
+        mode = "receipt ready"
+        summary = "A GenLayer-readable receipt is selected. GenLayer can judge after the contract fetches it."
+    elif has_known_founder:
+        mode = "founder mapped"
+        summary = "Founder account is mapped. Find the exact post, reply, or quote before GenLayer judges."
+    elif candidate_route:
+        mode = "candidate route"
+        summary = "Founder/source candidates are prepared. Verify identity, then find the exact claim receipt."
+
+    return {
+        "mode": mode,
+        "summary": summary,
+        "stages": [
+            {
+                "label": "Project identity",
+                "value": f"Likely project: {project_name}" if project_name else "Project not detected yet",
+                "detail": f"Identity helper: {identity_receipt['title']}"
+                if identity_receipt
+                else "Use official project links or discovery indexes to confirm the project.",
+                "status": "ready" if project_name else "pending",
+            },
+            {
+                "label": "Founder candidate",
+                "value": candidate_route["title"] if candidate_route else "Founder X account not selected yet",
+                "detail": "Known founder mapping found. A specific post or reply is still needed for judgment."
+                if has_known_founder
+                else "X-first discovery should find the founder account before any claim judgment.",
+                "status": "ready" if has_known_founder else "candidate" if candidate_route else "pending",
+            },
+            {
+                "label": "Identity verification",
+                "value": "Founder identity is mapped"
+                if has_known_founder
+                else "Official X can help verify founder identity"
+                if official_x
+                else "Needs official bio, team page, or project mention",
+                "detail": "Avoid random X results. Confirm the founder through an official project signal or linked bio.",
+                "status": "ready" if has_known_founder else "candidate" if official_x else "pending",
+            },
+            {
+                "label": "Claim receipt",
+                "value": claim_receipt["title"]
+                if claim_receipt
+                else "Pending founder post, reply, quote, or official post",
+                "detail": "This URL can be fetched by GenLayer for FACT, CAP, or UNCLEAR."
+                if claim_receipt
+                else "GenLayer waits until there is a real source URL, not just a search page.",
+                "status": "ready" if claim_receipt else "pending",
+            },
+        ],
+    }
+
+
+def with_founder_scout(research, category):
+    research["founderScout"] = make_founder_scout(research, category)
+    return research
+
+
 def scout_claim(claim, category, project_id="auto"):
     project = resolve_project(claim, project_id)
 
     if not claim.strip():
-        return {
+        return with_founder_scout({
             "mode": "claim needed",
             "status": "Write a claim first, then the scout can look for official receipts.",
             "judgeStandard": make_judge_standard(None, category),
@@ -1028,10 +1119,10 @@ def scout_claim(claim, category, project_id="auto"):
             "genlayerReceipt": None,
             "projectId": "auto",
             "projectName": "",
-        }
+        }, category)
 
     if not project:
-        return {
+        return with_founder_scout({
             "mode": "needs live search",
             "status": "Live search is not connected for this project yet. The next version will check official docs, blogs, social posts, exchanges, regulators, and credible news.",
             "judgeStandard": make_judge_standard(None, category),
@@ -1042,7 +1133,7 @@ def scout_claim(claim, category, project_id="auto"):
             "genlayerReceipt": None,
             "projectId": "auto",
             "projectName": "",
-        }
+        }, category)
 
     receipts = []
     for receipt in get_project_receipts(project, claim, category):
@@ -1055,7 +1146,7 @@ def scout_claim(claim, category, project_id="auto"):
     best_receipt = receipts[0] if receipts else None
     genlayer_receipt = choose_genlayer_receipt(receipts)
 
-    return {
+    return with_founder_scout({
         "mode": f"{project['name']} source scout",
         "status": make_scout_status(project, category, best_receipt, genlayer_receipt),
         "judgeStandard": make_judge_standard(project, category),
@@ -1066,7 +1157,7 @@ def scout_claim(claim, category, project_id="auto"):
         "genlayerReceipt": genlayer_receipt,
         "projectId": project["id"],
         "projectName": project["name"],
-    }
+    }, category)
 
 
 def clean_html_text(value):
@@ -1174,7 +1265,7 @@ def discover_project_sources(claim, category, project_name):
     seen_urls = set()
 
     if not project_name:
-        return {
+        return with_founder_scout({
             "mode": "live discovery",
             "status": "Name the project clearly so the scout can discover official sources.",
             "judgeStandard": make_judge_standard(None, category),
@@ -1186,7 +1277,7 @@ def discover_project_sources(claim, category, project_name):
             "projectId": "discovery",
             "projectName": "",
             "needsLiveDiscovery": True,
-        }
+        }, category)
 
     if category == "founder_statement":
         add_discovered_receipt(
@@ -1298,7 +1389,7 @@ def discover_project_sources(claim, category, project_name):
     else:
         status = f"Prepared discovery routes for {project_name}. Verify an official source before GenLayer judges."
 
-    return {
+    return with_founder_scout({
         "mode": f"{project_name} live discovery",
         "status": status,
         "judgeStandard": make_judge_standard({"name": project_name}, category),
@@ -1310,7 +1401,7 @@ def discover_project_sources(claim, category, project_name):
         "projectId": "discovered",
         "projectName": project_name,
         "needsLiveDiscovery": True,
-    }
+    }, category)
 
 
 def send_json(handler, status_code, body):

@@ -965,6 +965,91 @@ function makeScoutStatus(project, category, bestReceipt, genlayerReceipt) {
   return `Picked ${bestReceipt.title} as the strongest signal. GenLayer will fetch ${genlayerReceipt.title}.`;
 }
 
+function makeFounderScout(research, category) {
+  if (category !== "founder_statement") {
+    return null;
+  }
+
+  const receipts = research.receipts || [];
+  const projectName = research.projectName || "";
+  const identityReceipt =
+    receipts.find((receipt) => receipt.type === "directory") ||
+    receipts.find((receipt) => ["official", "docs", "blog", "github"].includes(receipt.type));
+  const founderReceipt = receipts.find((receipt) => receipt.type === "founder_x");
+  const founderSearch = receipts.find(
+    (receipt) => receipt.type === "search" && receipt.title.toLowerCase().includes("founder"),
+  );
+  const officialX = receipts.find((receipt) => receipt.type === "x");
+  const claimReceipt = research.genlayerReceipt || null;
+  const hasKnownFounder = Boolean(founderReceipt && !founderReceipt.discoveryOnly);
+  const candidateRoute = founderReceipt || founderSearch || officialX || null;
+
+  let mode = "x-first scout";
+  let summary = "Founder claims need a verified founder or official X receipt before GenLayer judges.";
+
+  if (research.awaitingScout) {
+    mode = "waiting";
+    summary = "Click Scout Claim to prepare founder identity and claim-receipt checks.";
+  } else if (claimReceipt) {
+    mode = "receipt ready";
+    summary = "A GenLayer-readable receipt is selected. GenLayer can judge after the contract fetches it.";
+  } else if (hasKnownFounder) {
+    mode = "founder mapped";
+    summary = "Founder account is mapped. Find the exact post, reply, or quote before GenLayer judges.";
+  } else if (candidateRoute) {
+    mode = "candidate route";
+    summary = "Founder/source candidates are prepared. Verify identity, then find the exact claim receipt.";
+  }
+
+  return {
+    mode,
+    summary,
+    stages: [
+      {
+        label: "Project identity",
+        value: projectName ? `Likely project: ${projectName}` : "Project not detected yet",
+        detail: identityReceipt
+          ? `Identity helper: ${identityReceipt.title}`
+          : "Use official project links or discovery indexes to confirm the project.",
+        status: projectName ? "ready" : "pending",
+      },
+      {
+        label: "Founder candidate",
+        value: candidateRoute ? candidateRoute.title : "Founder X account not selected yet",
+        detail: hasKnownFounder
+          ? "Known founder mapping found. A specific post or reply is still needed for judgment."
+          : "X-first discovery should find the founder account before any claim judgment.",
+        status: hasKnownFounder ? "ready" : candidateRoute ? "candidate" : "pending",
+      },
+      {
+        label: "Identity verification",
+        value: hasKnownFounder
+          ? "Founder identity is mapped"
+          : officialX
+            ? "Official X can help verify founder identity"
+            : "Needs official bio, team page, or project mention",
+        detail: "Avoid random X results. Confirm the founder through an official project signal or linked bio.",
+        status: hasKnownFounder ? "ready" : officialX ? "candidate" : "pending",
+      },
+      {
+        label: "Claim receipt",
+        value: claimReceipt ? claimReceipt.title : "Pending founder post, reply, quote, or official post",
+        detail: claimReceipt
+          ? "This URL can be fetched by GenLayer for FACT, CAP, or UNCLEAR."
+          : "GenLayer waits until there is a real source URL, not just a search page.",
+        status: claimReceipt ? "ready" : "pending",
+      },
+    ],
+  };
+}
+
+function withFounderScout(research, category) {
+  return {
+    ...research,
+    founderScout: makeFounderScout(research, category),
+  };
+}
+
 function rankReceipts(receipts, claim, category) {
   return [...receipts]
     .map((receipt) => ({
@@ -979,7 +1064,7 @@ function scoutClaim(claim, category, projectId = "auto") {
   const project = resolveProject(claim, projectId);
 
   if (!claim.trim()) {
-    return {
+    return withFounderScout({
       mode: "claim needed",
       status: "Write a claim first, then the scout can look for official receipts.",
       judgeStandard: makeJudgeStandard(undefined, category),
@@ -990,11 +1075,11 @@ function scoutClaim(claim, category, projectId = "auto") {
       genlayerReceipt: null,
       projectId: "auto",
       projectName: "",
-    };
+    }, category);
   }
 
   if (!project) {
-    return {
+    return withFounderScout({
       mode: "needs live search",
       status:
         "Live search is not connected for this project yet. The next version will check official docs, blogs, social posts, exchanges, regulators, and credible news.",
@@ -1006,7 +1091,7 @@ function scoutClaim(claim, category, projectId = "auto") {
       genlayerReceipt: null,
       projectId: "auto",
       projectName: "",
-    };
+    }, category);
   }
 
   const receipts = rankReceipts(getProjectReceipts(project, claim, category), claim, category);
@@ -1014,7 +1099,7 @@ function scoutClaim(claim, category, projectId = "auto") {
   const bestReceipt = receipts[0] || null;
   const genlayerReceipt = chooseGenLayerReceipt(receipts);
 
-  return {
+  return withFounderScout({
     mode: `${project.name} source scout`,
     status: makeScoutStatus(project, category, bestReceipt, genlayerReceipt),
     judgeStandard: makeJudgeStandard(project, category),
@@ -1025,7 +1110,7 @@ function scoutClaim(claim, category, projectId = "auto") {
     genlayerReceipt,
     projectId: project.id,
     projectName: project.name,
-  };
+  }, category);
 }
 
 function cleanHtmlText(value) {
@@ -1161,7 +1246,7 @@ async function discoverProjectSources(claim, category, projectName) {
   const seenUrls = new Set();
 
   if (!cleanProjectName) {
-    return {
+    return withFounderScout({
       mode: "live discovery",
       status: "Name the project clearly so the scout can discover official sources.",
       judgeStandard: makeJudgeStandard(undefined, category),
@@ -1173,7 +1258,7 @@ async function discoverProjectSources(claim, category, projectName) {
       projectId: "discovery",
       projectName: "",
       needsLiveDiscovery: true,
-    };
+    }, category);
   }
 
   if (category === "founder_statement") {
@@ -1292,7 +1377,7 @@ async function discoverProjectSources(claim, category, projectName) {
       ? `Prepared X-first discovery routes for ${cleanProjectName}. Verify a founder or official X source before GenLayer judges.`
       : `Prepared discovery routes for ${cleanProjectName}. Verify an official source before GenLayer judges.`;
 
-  return {
+  return withFounderScout({
     mode: `${cleanProjectName} live discovery`,
     status,
     judgeStandard: makeJudgeStandard({ name: cleanProjectName }, category),
@@ -1304,7 +1389,7 @@ async function discoverProjectSources(claim, category, projectName) {
     projectId: "discovered",
     projectName: cleanProjectName,
     needsLiveDiscovery: true,
-  };
+  }, category);
 }
 
 function sendJson(response, statusCode, body) {

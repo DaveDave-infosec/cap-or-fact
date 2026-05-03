@@ -1287,6 +1287,89 @@ function getGenLayerSourceUrls(research) {
   return [];
 }
 
+function findReceipt(receipts, test) {
+  return receipts.find((receipt) => receipt && test(receipt)) || null;
+}
+
+function makeFounderScout(research, category) {
+  if (category !== "founder_statement") {
+    return null;
+  }
+
+  const receipts = research.receipts || [];
+  const projectName = research.projectName || research.likelyProjectName || "";
+  const identityReceipt =
+    findReceipt(receipts, (receipt) => receipt.type === "directory") ||
+    findReceipt(receipts, (receipt) => ["official", "docs", "blog", "github"].includes(receipt.type));
+  const founderReceipt = findReceipt(receipts, (receipt) => receipt.type === "founder_x");
+  const founderSearch = findReceipt(
+    receipts,
+    (receipt) => receipt.type === "search" && receipt.title.toLowerCase().includes("founder"),
+  );
+  const officialX = findReceipt(receipts, (receipt) => receipt.type === "x");
+  const claimReceipt = research.genlayerReceipt || null;
+  const hasKnownFounder = Boolean(founderReceipt && !founderReceipt.discoveryOnly);
+  const candidateRoute = founderReceipt || founderSearch || officialX || null;
+
+  const stages = [
+    {
+      label: "Project identity",
+      value: projectName ? `Likely project: ${projectName}` : "Project not detected yet",
+      detail: identityReceipt
+        ? `Identity helper: ${identityReceipt.title}`
+        : "Use official project links or discovery indexes to confirm the project.",
+      status: projectName ? "ready" : "pending",
+    },
+    {
+      label: "Founder candidate",
+      value: candidateRoute
+        ? candidateRoute.title
+        : "Founder X account not selected yet",
+      detail: hasKnownFounder
+        ? "Known founder mapping found. A specific post or reply is still needed for judgment."
+        : "X-first discovery should find the founder account before any claim judgment.",
+      status: hasKnownFounder ? "ready" : candidateRoute ? "candidate" : "pending",
+    },
+    {
+      label: "Identity verification",
+      value: hasKnownFounder
+        ? "Founder identity is mapped"
+        : officialX
+          ? "Official X can help verify founder identity"
+          : "Needs official bio, team page, or project mention",
+      detail: "Avoid random X results. Confirm the founder through an official project signal or linked bio.",
+      status: hasKnownFounder ? "ready" : officialX ? "candidate" : "pending",
+    },
+    {
+      label: "Claim receipt",
+      value: claimReceipt ? claimReceipt.title : "Pending founder post, reply, quote, or official post",
+      detail: claimReceipt
+        ? "This URL can be fetched by GenLayer for FACT, CAP, or UNCLEAR."
+        : "GenLayer waits until there is a real source URL, not just a search page.",
+      status: claimReceipt ? "ready" : "pending",
+    },
+  ];
+
+  let mode = "x-first scout";
+  let summary = "Founder claims need a verified founder or official X receipt before GenLayer judges.";
+
+  if (research.awaitingScout) {
+    mode = "waiting";
+    summary = "Click Scout Claim to prepare founder identity and claim-receipt checks.";
+  } else if (claimReceipt) {
+    mode = "receipt ready";
+    summary = "A GenLayer-readable receipt is selected. GenLayer can judge after the contract fetches it.";
+  } else if (hasKnownFounder) {
+    mode = "founder mapped";
+    summary = "Founder account is mapped. Find the exact post, reply, or quote before GenLayer judges.";
+  } else if (candidateRoute) {
+    mode = "candidate route";
+    summary = "Founder/source candidates are prepared. Verify identity, then find the exact claim receipt.";
+  }
+
+  return { mode, summary, stages };
+}
+
 function normalizeResearch(research, category) {
   const receipts = (research.receipts || []).map((receipt) => ({
     ...receipt,
@@ -1302,6 +1385,7 @@ function normalizeResearch(research, category) {
     genlayerSourceUrls: research.genlayerSourceUrls || (genlayerReceipt ? [genlayerReceipt.url] : []),
     bestReceipt,
     genlayerReceipt,
+    founderScout: research.founderScout || makeFounderScout({ ...research, receipts, bestReceipt, genlayerReceipt }, category),
   };
 }
 
@@ -1584,6 +1668,43 @@ function renderReceipts(research, category) {
   });
 }
 
+function renderFounderScout(research) {
+  const box = document.querySelector("#founder-scout");
+  const mode = document.querySelector("#founder-scout-mode");
+  const status = document.querySelector("#founder-scout-status");
+  const list = document.querySelector("#founder-scout-list");
+  const scout = research.founderScout;
+
+  if (!scout) {
+    box.hidden = true;
+    list.innerHTML = "";
+    return;
+  }
+
+  box.hidden = false;
+  mode.textContent = scout.mode;
+  status.textContent = scout.summary;
+  list.innerHTML = "";
+
+  scout.stages.forEach((stage, index) => {
+    const item = document.createElement("li");
+    const marker = document.createElement("em");
+    const body = document.createElement("div");
+    const label = document.createElement("strong");
+    const value = document.createElement("span");
+    const detail = document.createElement("p");
+
+    item.className = `is-${stage.status || "pending"}`;
+    marker.textContent = String(index + 1);
+    label.textContent = stage.label;
+    value.textContent = stage.value;
+    detail.textContent = stage.detail;
+    body.append(label, value, detail);
+    item.append(marker, body);
+    list.append(item);
+  });
+}
+
 function renderClaimQuality(quality) {
   const box = document.querySelector("#claim-quality");
   const status = document.querySelector("#quality-status");
@@ -1796,6 +1917,7 @@ function renderPreview() {
 
   renderClaimQuality(data.quality);
   renderReceipts(data.research, data.category);
+  renderFounderScout(data.research);
   renderJson(data);
   renderStudioRun(data, preview);
   renderCaseFeed();

@@ -428,6 +428,85 @@ label {
   content: attr(data-empty-label);
 }
 
+.founder-scout {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid rgba(110, 168, 254, 0.32);
+  border-radius: 8px;
+  background: rgba(110, 168, 254, 0.08);
+}
+
+.founder-scout[hidden] {
+  display: none;
+}
+
+.founder-flow {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.founder-flow li {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0d1115;
+}
+
+.founder-flow em {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  font-style: normal;
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.founder-flow strong {
+  display: block;
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+.founder-flow span,
+.founder-flow p {
+  display: block;
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.founder-flow li.is-ready em {
+  color: var(--ink);
+  border-color: transparent;
+  background: var(--fact);
+}
+
+.founder-flow li.is-candidate em {
+  color: var(--ink);
+  border-color: transparent;
+  background: var(--blue);
+}
+
+.founder-flow li.is-pending em {
+  color: var(--unclear);
+  border-color: rgba(247, 201, 72, 0.34);
+  background: rgba(247, 201, 72, 0.08);
+}
+
 .advanced-rules {
   margin: 0;
 }
