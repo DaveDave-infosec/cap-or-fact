@@ -1231,7 +1231,10 @@ function fetchJson(url, headers = {}, timeoutMs = 8000) {
         });
         response.on("end", () => {
           if (response.statusCode < 200 || response.statusCode >= 300) {
-            reject(new Error(`Request failed with status ${response.statusCode}`));
+            const error = new Error(`Request failed with status ${response.statusCode}`);
+            error.statusCode = response.statusCode;
+            error.responseBody = body.slice(0, 1200);
+            reject(error);
             return;
           }
 
@@ -1250,6 +1253,24 @@ function fetchJson(url, headers = {}, timeoutMs = 8000) {
     });
     request.on("error", reject);
   });
+}
+
+function describeXApiError(error) {
+  const statusCode = error && error.statusCode;
+
+  if (statusCode === 401) {
+    return "X crawler is waiting for a valid API token.";
+  }
+
+  if (statusCode === 403) {
+    return "X crawler is waiting for X search API access or credits.";
+  }
+
+  if (statusCode === 429) {
+    return "X crawler hit the current rate limit. Try again later.";
+  }
+
+  return `X crawler could not complete: ${error.message}`;
 }
 
 async function xApiGet(pathname, params = {}) {
@@ -1437,7 +1458,7 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
     } catch (error) {
       return {
         enabled: true,
-        status: `X crawler could not complete: ${error.message}`,
+        status: describeXApiError(error),
         candidates: foundCandidates,
         receipts: foundReceipts,
       };
