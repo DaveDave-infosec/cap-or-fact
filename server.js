@@ -911,10 +911,18 @@ function scoreReceipt(receipt, claim, category) {
 
 function explainReceiptChoice(receipt, category) {
   if (receipt.type === "directory") {
+    if (category === "founder_statement") {
+      return "CryptoRank can help confirm project identity, but founder comments must come from founder or official X.";
+    }
+
     return "CryptoRank helps discover and verify early-stage projects before checking official channels.";
   }
 
   if (receipt.type === "search") {
+    if (category === "founder_statement") {
+      return "This route prioritizes X because founder comments, replies, and hints usually live there.";
+    }
+
     return "This route helps find official sources for projects outside the current registry.";
   }
 
@@ -1168,31 +1176,65 @@ async function discoverProjectSources(claim, category, projectName) {
     };
   }
 
-  addDiscoveredReceipt(
-    receipts,
-    seenUrls,
-    `CryptoRank search for ${cleanProjectName}`,
-    `https://cryptorank.io/search?query=${encodeURIComponent(cleanProjectName)}`,
-    "directory",
-    82,
-    true,
-  );
-
-  const searchPlan = [
-    [`${cleanProjectName} official website crypto`, 74],
-    [`${cleanProjectName} official X crypto`, 76],
-    [`${cleanProjectName} docs crypto`, 68],
-    [`${cleanProjectName} blog news crypto`, 66],
-    [`site:github.com ${cleanProjectName} crypto`, 62],
-    [`site:cryptorank.io ${cleanProjectName}`, 80],
-  ];
-
   if (category === "founder_statement") {
-    searchPlan.unshift(
-      [`${cleanProjectName} founder X account`, 88],
-      [`${cleanProjectName} founder twitter`, 84],
+    addDiscoveredReceipt(
+      receipts,
+      seenUrls,
+      `Search founder X for ${cleanProjectName}`,
+      `https://x.com/search?q=${encodeURIComponent(`${cleanProjectName} founder`)}`,
+      "search",
+      96,
+      true,
+    );
+    addDiscoveredReceipt(
+      receipts,
+      seenUrls,
+      `Search official X for ${cleanProjectName}`,
+      `https://x.com/search?q=${encodeURIComponent(`${cleanProjectName} official`)}`,
+      "search",
+      90,
+      true,
+    );
+    addDiscoveredReceipt(
+      receipts,
+      seenUrls,
+      `CryptoRank identity check for ${cleanProjectName}`,
+      `https://cryptorank.io/search?query=${encodeURIComponent(cleanProjectName)}`,
+      "directory",
+      30,
+      true,
+    );
+  } else {
+    addDiscoveredReceipt(
+      receipts,
+      seenUrls,
+      `CryptoRank search for ${cleanProjectName}`,
+      `https://cryptorank.io/search?query=${encodeURIComponent(cleanProjectName)}`,
+      "directory",
+      82,
+      true,
     );
   }
+
+  const searchPlan =
+    category === "founder_statement"
+      ? [
+          [`${cleanProjectName} founder X account`, 92],
+          [`${cleanProjectName} founder twitter`, 88],
+          [`${cleanProjectName} official X crypto`, 84],
+          [`${cleanProjectName} founder interview crypto`, 70],
+          [`${cleanProjectName} official website crypto`, 56],
+          [`${cleanProjectName} blog founder crypto`, 52],
+          [`site:github.com ${cleanProjectName} crypto`, 40],
+        ]
+      : [
+          [`${cleanProjectName} official website crypto`, 74],
+          [`${cleanProjectName} official X crypto`, 76],
+          [`${cleanProjectName} docs crypto`, 68],
+          [`${cleanProjectName} blog news crypto`, 66],
+          [`site:github.com ${cleanProjectName} crypto`, 62],
+          [`site:cryptorank.io ${cleanProjectName}`, 80],
+        ];
 
   for (const [query, priority] of searchPlan) {
     const results = await searchWeb(query, 3);
@@ -1246,7 +1288,9 @@ async function discoverProjectSources(claim, category, projectName) {
   const genlayerReceipt = chooseGenLayerReceipt(scoredReceipts);
   const status = genlayerReceipt
     ? `Discovered source candidates for ${cleanProjectName}. GenLayer will fetch ${genlayerReceipt.title}.`
-    : `Prepared discovery routes for ${cleanProjectName}. Verify an official source before GenLayer judges.`;
+    : category === "founder_statement"
+      ? `Prepared X-first discovery routes for ${cleanProjectName}. Verify a founder or official X source before GenLayer judges.`
+      : `Prepared discovery routes for ${cleanProjectName}. Verify an official source before GenLayer judges.`;
 
   return {
     mode: `${cleanProjectName} live discovery`,

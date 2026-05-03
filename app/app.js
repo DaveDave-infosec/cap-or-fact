@@ -1234,10 +1234,18 @@ function scoreReceipt(receipt, claim, category) {
 
 function explainReceiptChoice(receipt, category) {
   if (receipt.type === "directory") {
+    if (category === "founder_statement") {
+      return "CryptoRank can help confirm project identity, but founder comments must come from founder or official X.";
+    }
+
     return "CryptoRank helps discover and verify early-stage projects before checking official channels.";
   }
 
   if (receipt.type === "search") {
+    if (category === "founder_statement") {
+      return "This route prioritizes X because founder comments, replies, and hints usually live there.";
+    }
+
     return "This route helps find official sources for projects outside the current registry.";
   }
 

@@ -966,8 +966,15 @@ def score_receipt(receipt, claim, category):
 
 def explain_receipt_choice(receipt, category):
     if receipt["type"] == "directory":
+        if category == "founder_statement":
+            return "CryptoRank can help confirm project identity, but founder comments must come from founder or official X."
+
         return "CryptoRank helps discover and verify early-stage projects before checking official channels."
+
     if receipt["type"] == "search":
+        if category == "founder_statement":
+            return "This route prioritizes X because founder comments, replies, and hints usually live there."
+
         return "This route helps find official sources for projects outside the current registry."
 
     profile = SOURCE_REASON_PROFILES.get(category, SOURCE_REASON_PROFILES["airdrop_rumor"])
@@ -1181,30 +1188,60 @@ def discover_project_sources(claim, category, project_name):
             "needsLiveDiscovery": True,
         }
 
-    add_discovered_receipt(
-        receipts,
-        seen_urls,
-        f"CryptoRank search for {project_name}",
-        "https://cryptorank.io/search?query=" + quote_plus(project_name),
-        "directory",
-        82,
-        True,
-    )
-
-    search_plan = [
-        (f"{project_name} official website crypto", 74),
-        (f"{project_name} official X crypto", 76),
-        (f"{project_name} docs crypto", 68),
-        (f"{project_name} blog news crypto", 66),
-        (f"site:github.com {project_name} crypto", 62),
-        (f"site:cryptorank.io {project_name}", 80),
-    ]
-
     if category == "founder_statement":
+        add_discovered_receipt(
+            receipts,
+            seen_urls,
+            f"Search founder X for {project_name}",
+            "https://x.com/search?q=" + quote_plus(project_name + " founder"),
+            "search",
+            96,
+            True,
+        )
+        add_discovered_receipt(
+            receipts,
+            seen_urls,
+            f"Search official X for {project_name}",
+            "https://x.com/search?q=" + quote_plus(project_name + " official"),
+            "search",
+            90,
+            True,
+        )
+        add_discovered_receipt(
+            receipts,
+            seen_urls,
+            f"CryptoRank identity check for {project_name}",
+            "https://cryptorank.io/search?query=" + quote_plus(project_name),
+            "directory",
+            30,
+            True,
+        )
         search_plan = [
-            (f"{project_name} founder X account", 88),
-            (f"{project_name} founder twitter", 84),
-            *search_plan,
+            (f"{project_name} founder X account", 92),
+            (f"{project_name} founder twitter", 88),
+            (f"{project_name} official X crypto", 84),
+            (f"{project_name} founder interview crypto", 70),
+            (f"{project_name} official website crypto", 56),
+            (f"{project_name} blog founder crypto", 52),
+            (f"site:github.com {project_name} crypto", 40),
+        ]
+    else:
+        add_discovered_receipt(
+            receipts,
+            seen_urls,
+            f"CryptoRank search for {project_name}",
+            "https://cryptorank.io/search?query=" + quote_plus(project_name),
+            "directory",
+            82,
+            True,
+        )
+        search_plan = [
+            (f"{project_name} official website crypto", 74),
+            (f"{project_name} official X crypto", 76),
+            (f"{project_name} docs crypto", 68),
+            (f"{project_name} blog news crypto", 66),
+            (f"site:github.com {project_name} crypto", 62),
+            (f"site:cryptorank.io {project_name}", 80),
         ]
 
     for query, priority in search_plan:
@@ -1254,11 +1291,12 @@ def discover_project_sources(claim, category, project_name):
     best_receipt = scored_receipts[0] if scored_receipts else None
     genlayer_receipt = choose_genlayer_receipt(scored_receipts)
 
-    status = (
-        f"Discovered source candidates for {project_name}. GenLayer will fetch {genlayer_receipt['title']}."
-        if genlayer_receipt
-        else f"Prepared discovery routes for {project_name}. Verify an official source before GenLayer judges."
-    )
+    if genlayer_receipt:
+        status = f"Discovered source candidates for {project_name}. GenLayer will fetch {genlayer_receipt['title']}."
+    elif category == "founder_statement":
+        status = f"Prepared X-first discovery routes for {project_name}. Verify a founder or official X source before GenLayer judges."
+    else:
+        status = f"Prepared discovery routes for {project_name}. Verify an official source before GenLayer judges."
 
     return {
         "mode": f"{project_name} live discovery",
