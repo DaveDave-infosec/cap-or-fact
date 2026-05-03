@@ -656,6 +656,7 @@ const claimTypeLabels = {
 };
 
 const sourceTypeLabels = {
+  founder_post: "founder post",
   founder_x: "founder X",
   x: "official X",
   blog: "blog",
@@ -677,7 +678,7 @@ const sourceProfiles = {
   snapshot_confirmation: { x: 92, blog: 72, official: 45, docs: 24, github: 18 },
   token_info: { official: 78, docs: 68, github: 48, blog: 36, x: 26 },
   exchange_listing: { exchange: 92, x: 75, blog: 64, official: 52, docs: 24 },
-  founder_statement: { founder_x: 120, x: 86, blog: 58, official: 48, docs: 18 },
+  founder_statement: { founder_post: 145, founder_x: 120, x: 86, blog: 58, official: 48, docs: 18 },
   partnership_claim: { x: 84, blog: 74, official: 62, docs: 24 },
   funding_raise: { blog: 84, newswire: 82, x: 76, official: 58, docs: 22 },
   roadmap_check: { docs: 72, blog: 66, official: 52, x: 42, github: 34 },
@@ -717,6 +718,7 @@ const sourceReasonProfiles = {
     docs: "Docs are usually secondary for listing claims.",
   },
   founder_statement: {
+    founder_post: "A founder X post or reply is the strongest source for direct founder statement claims.",
     founder_x: "Founder X is the strongest source for direct comments, replies, and quoted statements.",
     x: "Founder and official X posts are strongest for direct statement claims.",
     blog: "Blogs help when the quote appears in a formal announcement.",
@@ -1198,6 +1200,7 @@ function scoreReceipt(receipt, claim, category) {
   if (haystack.includes("raw.githubusercontent.com")) score += category === "token_info" ? 18 : 6;
   if (haystack.includes("blog") || haystack.includes("mirror.xyz")) score += 4;
   if (haystack.includes("twitter.com") || haystack.includes("x.com")) score += 8;
+  if (receipt.type === "founder_post" && category === "founder_statement") score += 140;
   if (receipt.type === "founder_x" && isFounderClaim(claim, category)) score += 120;
 
   if (category === "airdrop_rumor") {
@@ -1219,6 +1222,7 @@ function scoreReceipt(receipt, claim, category) {
   }
 
   if (category === "exchange_listing" && haystack.includes("listing")) score += 16;
+  if (category === "founder_statement" && receipt.type === "founder_post") score += 36;
   if (category === "founder_statement" && receipt.type === "founder_x") score += 26;
   if (category === "founder_statement" && (haystack.includes("founder") || receipt.type === "x")) score += 14;
   if (category === "partnership_claim" && (haystack.includes("partner") || haystack.includes("partnership") || haystack.includes("integration"))) score += 16;
@@ -1281,7 +1285,7 @@ function getGenLayerSourceUrls(research) {
   }
 
   if (research.genlayerReceipt) {
-    return [research.genlayerReceipt.url];
+    return [research.genlayerReceipt.genlayerUrl || research.genlayerReceipt.url];
   }
 
   return [];
@@ -1302,14 +1306,15 @@ function makeFounderScout(research, category) {
     findReceipt(receipts, (receipt) => receipt.type === "directory") ||
     findReceipt(receipts, (receipt) => ["official", "docs", "blog", "github"].includes(receipt.type));
   const founderReceipt = findReceipt(receipts, (receipt) => receipt.type === "founder_x");
+  const founderPost = findReceipt(receipts, (receipt) => receipt.type === "founder_post");
   const founderSearch = findReceipt(
     receipts,
     (receipt) => receipt.type === "search" && receipt.title.toLowerCase().includes("founder"),
   );
   const officialX = findReceipt(receipts, (receipt) => receipt.type === "x");
   const claimReceipt = research.genlayerReceipt || null;
-  const hasKnownFounder = Boolean(founderReceipt && !founderReceipt.discoveryOnly);
-  const candidateRoute = founderReceipt || founderSearch || officialX || null;
+  const hasKnownFounder = Boolean((founderReceipt && !founderReceipt.discoveryOnly) || founderPost);
+  const candidateRoute = founderReceipt || founderPost || founderSearch || officialX || null;
 
   const stages = [
     {
@@ -1356,9 +1361,15 @@ function makeFounderScout(research, category) {
   if (research.awaitingScout) {
     mode = "waiting";
     summary = "Click Scout Claim to prepare founder identity and claim-receipt checks.";
+  } else if (research.xScout && !research.xScout.enabled) {
+    mode = "crawler pending";
+    summary = research.xScout.status;
   } else if (claimReceipt) {
     mode = "receipt ready";
     summary = "A GenLayer-readable receipt is selected. GenLayer can judge after the contract fetches it.";
+  } else if (research.xScout && research.xScout.enabled) {
+    mode = "crawler ran";
+    summary = research.xScout.status;
   } else if (hasKnownFounder) {
     mode = "founder mapped";
     summary = "Founder account is mapped. Find the exact post, reply, or quote before GenLayer judges.";
@@ -1382,7 +1393,7 @@ function normalizeResearch(research, category) {
     ...research,
     receipts,
     sourceUrls: research.sourceUrls || receipts.map((receipt) => receipt.url),
-    genlayerSourceUrls: research.genlayerSourceUrls || (genlayerReceipt ? [genlayerReceipt.url] : []),
+    genlayerSourceUrls: research.genlayerSourceUrls || (genlayerReceipt ? [genlayerReceipt.genlayerUrl || genlayerReceipt.url] : []),
     bestReceipt,
     genlayerReceipt,
     founderScout: research.founderScout || makeFounderScout({ ...research, receipts, bestReceipt, genlayerReceipt }, category),
@@ -1429,7 +1440,7 @@ function researchClaim(claim, category, projectId = "auto") {
       judgeStandard: makeJudgeStandard(project, category),
       receipts,
       sourceUrls: receipts.map((receipt) => receipt.url),
-      genlayerSourceUrls: genlayerReceipt ? [genlayerReceipt.url] : [],
+      genlayerSourceUrls: genlayerReceipt ? [genlayerReceipt.genlayerUrl || genlayerReceipt.url] : [],
       bestReceipt,
       genlayerReceipt,
       projectId: project.id,
@@ -1501,7 +1512,7 @@ function createVerifiedCitreaResearch(category) {
     judgeStandard: makeJudgeStandard(project, category),
     receipts,
     sourceUrls: receipts.map((receipt) => receipt.url),
-    genlayerSourceUrls: genlayerReceipt ? [genlayerReceipt.url] : [],
+    genlayerSourceUrls: genlayerReceipt ? [genlayerReceipt.genlayerUrl || genlayerReceipt.url] : [],
     bestReceipt,
     genlayerReceipt,
     projectId: "citrea",
@@ -2106,12 +2117,13 @@ function buildShareText() {
   const preview = displayedCase ? displayedCase.preview : previewCase(currentData);
   const bestReceipt = data.research.bestReceipt || data.research.receipts[0];
   const genlayerReceipt = data.research.genlayerReceipt;
+  const genlayerReceiptUrl = genlayerReceipt ? genlayerReceipt.genlayerUrl || genlayerReceipt.url : "";
   const sourceLine =
     bestReceipt && genlayerReceipt && !isSameReceipt(bestReceipt, genlayerReceipt)
       ? `Primary signal: ${bestReceipt.title} (${bestReceipt.url})
-GenLayer receipt: ${genlayerReceipt.title} (${genlayerReceipt.url})`
+GenLayer receipt: ${genlayerReceipt.title} (${genlayerReceiptUrl})`
       : genlayerReceipt
-        ? `GenLayer receipt: ${genlayerReceipt.title} (${genlayerReceipt.url})`
+        ? `GenLayer receipt: ${genlayerReceipt.title} (${genlayerReceiptUrl})`
         : bestReceipt
           ? `Discovery route: ${bestReceipt.title} (${bestReceipt.url})
 GenLayer receipt: pending official source`
@@ -2143,6 +2155,7 @@ function buildStudioStepsText() {
   const contractInputs = getContractInputs(data);
   const bestReceipt = data.research.bestReceipt || data.research.receipts[0];
   const genlayerReceipt = data.research.genlayerReceipt;
+  const genlayerReceiptUrl = genlayerReceipt ? genlayerReceipt.genlayerUrl || genlayerReceipt.url : "";
   const primaryLine =
     bestReceipt && genlayerReceipt && !isSameReceipt(bestReceipt, genlayerReceipt)
       ? `Primary signal:
@@ -2151,7 +2164,7 @@ ${bestReceipt.url}
 
 GenLayer-readable receipt:
 ${genlayerReceipt.title}
-${genlayerReceipt.url}
+${genlayerReceiptUrl}
 `
       : bestReceipt && !genlayerReceipt
         ? `Discovery route:
@@ -2164,7 +2177,7 @@ pending official URL
         : genlayerReceipt
           ? `GenLayer-readable receipt:
 ${genlayerReceipt.title}
-${genlayerReceipt.url}
+${genlayerReceiptUrl}
 `
           : "";
 

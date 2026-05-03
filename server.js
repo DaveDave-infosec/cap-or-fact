@@ -6,6 +6,9 @@ const { URL } = require("node:url");
 
 const PORT = Number(process.env.PORT || 4173);
 const APP_DIR = path.join(__dirname, "app");
+const X_BEARER_TOKEN = process.env.X_BEARER_TOKEN || process.env.TWITTER_BEARER_TOKEN || "";
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || "").replace(/\/$/, "");
+const X_API_BASE_URL = (process.env.X_API_BASE_URL || "https://api.x.com").replace(/\/$/, "");
 
 const projectRegistry = [
   {
@@ -687,7 +690,7 @@ const sourceProfiles = {
   snapshot_confirmation: { x: 92, blog: 72, official: 45, docs: 24, github: 18 },
   token_info: { official: 78, docs: 68, github: 48, blog: 36, x: 26 },
   exchange_listing: { exchange: 92, x: 75, blog: 64, official: 52, docs: 24 },
-  founder_statement: { founder_x: 120, x: 86, blog: 58, official: 48, docs: 18 },
+  founder_statement: { founder_post: 145, founder_x: 120, x: 86, blog: 58, official: 48, docs: 18 },
   partnership_claim: { x: 84, blog: 74, official: 62, docs: 24 },
   funding_raise: { blog: 84, newswire: 82, x: 76, official: 58, docs: 22 },
   roadmap_check: { docs: 72, blog: 66, official: 52, x: 42, github: 34 },
@@ -727,6 +730,7 @@ const sourceReasonProfiles = {
     docs: "Docs are usually secondary for listing claims.",
   },
   founder_statement: {
+    founder_post: "A founder X post or reply is the strongest source for direct founder statement claims.",
     founder_x: "Founder X is the strongest source for direct comments, replies, and quoted statements.",
     x: "Founder and official X posts are strongest for direct statement claims.",
     blog: "Blogs help when the quote appears in a formal announcement.",
@@ -875,6 +879,7 @@ function scoreReceipt(receipt, claim, category) {
   if (haystack.includes("raw.githubusercontent.com")) score += category === "token_info" ? 18 : 6;
   if (haystack.includes("blog") || haystack.includes("mirror.xyz")) score += 4;
   if (haystack.includes("twitter.com") || haystack.includes("x.com")) score += 8;
+  if (receipt.type === "founder_post" && category === "founder_statement") score += 140;
   if (receipt.type === "founder_x" && isFounderClaim(claim, category)) score += 120;
 
   if (category === "airdrop_rumor") {
@@ -896,6 +901,7 @@ function scoreReceipt(receipt, claim, category) {
   }
 
   if (category === "exchange_listing" && haystack.includes("listing")) score += 16;
+  if (category === "founder_statement" && receipt.type === "founder_post") score += 36;
   if (category === "founder_statement" && receipt.type === "founder_x") score += 26;
   if (category === "founder_statement" && (haystack.includes("founder") || receipt.type === "x")) score += 14;
   if (category === "partnership_claim" && (haystack.includes("partner") || haystack.includes("partnership") || haystack.includes("integration"))) score += 16;
@@ -945,6 +951,14 @@ function canGenLayerFetchReceipt(receipt) {
   );
 }
 
+function getReceiptUrlForGenLayer(receipt) {
+  if (!receipt) {
+    return "";
+  }
+
+  return receipt.genlayerUrl || receipt.url;
+}
+
 function chooseGenLayerReceipt(receipts) {
   return receipts.find((receipt) => canGenLayerFetchReceipt(receipt)) || null;
 }
@@ -976,13 +990,14 @@ function makeFounderScout(research, category) {
     receipts.find((receipt) => receipt.type === "directory") ||
     receipts.find((receipt) => ["official", "docs", "blog", "github"].includes(receipt.type));
   const founderReceipt = receipts.find((receipt) => receipt.type === "founder_x");
+  const founderPost = receipts.find((receipt) => receipt.type === "founder_post");
   const founderSearch = receipts.find(
     (receipt) => receipt.type === "search" && receipt.title.toLowerCase().includes("founder"),
   );
   const officialX = receipts.find((receipt) => receipt.type === "x");
   const claimReceipt = research.genlayerReceipt || null;
-  const hasKnownFounder = Boolean(founderReceipt && !founderReceipt.discoveryOnly);
-  const candidateRoute = founderReceipt || founderSearch || officialX || null;
+  const hasKnownFounder = Boolean((founderReceipt && !founderReceipt.discoveryOnly) || founderPost);
+  const candidateRoute = founderReceipt || founderPost || founderSearch || officialX || null;
 
   let mode = "x-first scout";
   let summary = "Founder claims need a verified founder or official X receipt before GenLayer judges.";
@@ -990,9 +1005,15 @@ function makeFounderScout(research, category) {
   if (research.awaitingScout) {
     mode = "waiting";
     summary = "Click Scout Claim to prepare founder identity and claim-receipt checks.";
+  } else if (research.xScout && !research.xScout.enabled) {
+    mode = "crawler pending";
+    summary = research.xScout.status;
   } else if (claimReceipt) {
     mode = "receipt ready";
     summary = "A GenLayer-readable receipt is selected. GenLayer can judge after the contract fetches it.";
+  } else if (research.xScout && research.xScout.enabled) {
+    mode = "crawler ran";
+    summary = research.xScout.status;
   } else if (hasKnownFounder) {
     mode = "founder mapped";
     summary = "Founder account is mapped. Find the exact post, reply, or quote before GenLayer judges.";
@@ -1035,7 +1056,7 @@ function makeFounderScout(research, category) {
         label: "Claim receipt",
         value: claimReceipt ? claimReceipt.title : "Pending founder post, reply, quote, or official post",
         detail: claimReceipt
-          ? "This URL can be fetched by GenLayer for FACT, CAP, or UNCLEAR."
+          ? "This automated receipt can be fetched by GenLayer for FACT, CAP, or UNCLEAR."
           : "GenLayer waits until there is a real source URL, not just a search page.",
         status: claimReceipt ? "ready" : "pending",
       },
@@ -1105,7 +1126,7 @@ function scoutClaim(claim, category, projectId = "auto") {
     judgeStandard: makeJudgeStandard(project, category),
     receipts,
     sourceUrls: receipts.map((receipt) => receipt.url),
-    genlayerSourceUrls: genlayerReceipt ? [genlayerReceipt.url] : [],
+    genlayerSourceUrls: genlayerReceipt ? [getReceiptUrlForGenLayer(genlayerReceipt)] : [],
     bestReceipt,
     genlayerReceipt,
     projectId: project.id,
@@ -1187,6 +1208,305 @@ async function searchWeb(query, limit = 4) {
   return results;
 }
 
+function fetchJson(url, headers = {}, timeoutMs = 8000) {
+  return new Promise((resolve, reject) => {
+    const request = https.get(
+      url,
+      {
+        headers: {
+          accept: "application/json",
+          "user-agent": "CapOrFactSourceScout/1.0",
+          ...headers,
+        },
+        timeout: timeoutMs,
+      },
+      (response) => {
+        let body = "";
+
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          if (body.length < 800000) {
+            body += chunk;
+          }
+        });
+        response.on("end", () => {
+          if (response.statusCode < 200 || response.statusCode >= 300) {
+            reject(new Error(`Request failed with status ${response.statusCode}`));
+            return;
+          }
+
+          try {
+            resolve(JSON.parse(body || "{}"));
+          } catch (error) {
+            reject(error);
+          }
+        });
+      },
+    );
+
+    request.on("timeout", () => {
+      request.destroy();
+      reject(new Error("Request timed out"));
+    });
+    request.on("error", reject);
+  });
+}
+
+async function xApiGet(pathname, params = {}) {
+  if (!X_BEARER_TOKEN) {
+    return null;
+  }
+
+  const requestUrl = new URL(pathname, X_API_BASE_URL);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      requestUrl.searchParams.set(key, value);
+    }
+  });
+
+  return fetchJson(requestUrl, {
+    authorization: `Bearer ${X_BEARER_TOKEN}`,
+  });
+}
+
+function extractXHandle(url) {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.replace(/^www\./, "").toLowerCase();
+
+    if (hostname !== "x.com" && hostname !== "twitter.com") {
+      return "";
+    }
+
+    const handle = parsed.pathname.split("/").filter(Boolean)[0] || "";
+    const blockedHandles = new Set(["home", "i", "intent", "search", "share"]);
+
+    if (!handle || blockedHandles.has(handle.toLowerCase())) {
+      return "";
+    }
+
+    return handle;
+  } catch {
+    return "";
+  }
+}
+
+function getKnownProjectByName(projectName) {
+  const normalized = String(projectName || "").toLowerCase();
+
+  return projectRegistry.find(
+    (project) =>
+      project.name.toLowerCase() === normalized ||
+      project.id === normalized ||
+      project.aliases.some((alias) => alias.toLowerCase() === normalized),
+  );
+}
+
+function getOfficialXHandle(projectName) {
+  const project = getKnownProjectByName(projectName);
+  const xUrl = project ? officialXByProject[project.id] : "";
+
+  return xUrl ? extractXHandle(xUrl) : "";
+}
+
+function claimKeywords(claim) {
+  const stopWords = new Set([
+    "has",
+    "have",
+    "did",
+    "does",
+    "the",
+    "for",
+    "and",
+    "with",
+    "that",
+    "this",
+    "from",
+    "official",
+    "founder",
+    "cofounder",
+    "co-founder",
+  ]);
+
+  return String(claim || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_ ]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length >= 4 && !stopWords.has(word))
+    .slice(0, 8);
+}
+
+function isFounderLikeUser(user, projectName) {
+  const haystack = `${user.name || ""} ${user.username || ""} ${user.description || ""}`.toLowerCase();
+  const normalizedProject = String(projectName || "").toLowerCase();
+  const founderSignal = /\b(founder|cofounder|co-founder|ceo|builder|creator)\b/.test(haystack);
+  const projectSignal = normalizedProject && haystack.includes(normalizedProject);
+
+  return founderSignal && projectSignal;
+}
+
+function makeXPostUrl(username, tweetId) {
+  return `https://x.com/${username}/status/${tweetId}`;
+}
+
+function makeXReceiptGatewayUrl(tweetId, publicBaseUrl = PUBLIC_BASE_URL) {
+  const baseUrl = String(publicBaseUrl || "").replace(/\/$/, "");
+
+  if (!baseUrl) {
+    return "";
+  }
+
+  return `${baseUrl}/api/x-receipt/${encodeURIComponent(tweetId)}`;
+}
+
+async function fetchXPostReceipt(tweetId) {
+  const payload = await xApiGet(`/2/tweets/${tweetId}`, {
+    expansions: "author_id",
+    "tweet.fields": "author_id,conversation_id,created_at,entities,public_metrics,referenced_tweets,text",
+    "user.fields": "description,entities,name,public_metrics,url,username,verified,verified_type",
+  });
+
+  if (!payload || !payload.data) {
+    return null;
+  }
+
+  const author = (payload.includes && payload.includes.users && payload.includes.users[0]) || null;
+  const sourceUrl = author ? makeXPostUrl(author.username, payload.data.id) : `https://x.com/i/web/status/${payload.data.id}`;
+
+  return {
+    source_type: "x_post",
+    source_url: sourceUrl,
+    fetched_at: new Date().toISOString(),
+    author: author
+      ? {
+          id: author.id,
+          name: author.name,
+          username: author.username,
+          description: author.description || "",
+          verified: Boolean(author.verified),
+          verified_type: author.verified_type || "",
+        }
+      : null,
+    post: {
+      id: payload.data.id,
+      text: payload.data.text || "",
+      created_at: payload.data.created_at || "",
+      conversation_id: payload.data.conversation_id || "",
+      public_metrics: payload.data.public_metrics || {},
+      referenced_tweets: payload.data.referenced_tweets || [],
+    },
+  };
+}
+
+async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, publicBaseUrl = PUBLIC_BASE_URL) {
+  if (!X_BEARER_TOKEN) {
+    return {
+      enabled: false,
+      status: "Automated X crawling is waiting for data-provider access.",
+      candidates: [],
+      receipts: [],
+    };
+  }
+
+  const officialHandle = getOfficialXHandle(projectName);
+  const keywords = claimKeywords(claim).filter((word) => word !== projectName.toLowerCase());
+  const keywordQuery = keywords.length ? keywords.slice(0, 5).join(" OR ") : "hint OR airdrop OR snapshot OR tge";
+  const queries = [
+    `"${projectName}" (founder OR cofounder OR "co-founder" OR CEO) (${keywordQuery}) -is:retweet`,
+    `"${projectName}" (${keywordQuery}) -is:retweet`,
+  ];
+
+  if (officialHandle) {
+    queries.unshift(`from:${officialHandle} (${keywordQuery}) -is:retweet`);
+  }
+
+  const foundCandidates = [];
+  const foundReceipts = [];
+
+  for (const query of queries) {
+    let payload = null;
+
+    try {
+      payload = await xApiGet("/2/tweets/search/recent", {
+        query,
+        max_results: "10",
+        expansions: "author_id",
+        "tweet.fields": "author_id,conversation_id,created_at,entities,public_metrics,referenced_tweets,text",
+        "user.fields": "description,entities,name,public_metrics,url,username,verified,verified_type",
+      });
+    } catch (error) {
+      return {
+        enabled: true,
+        status: `X crawler could not complete: ${error.message}`,
+        candidates: foundCandidates,
+        receipts: foundReceipts,
+      };
+    }
+
+    const tweets = payload && Array.isArray(payload.data) ? payload.data : [];
+    const users = new Map(
+      ((payload && payload.includes && payload.includes.users) || []).map((user) => [user.id, user]),
+    );
+
+    for (const tweet of tweets) {
+      const author = users.get(tweet.author_id);
+
+      if (!author) {
+        continue;
+      }
+
+      const isOfficial = officialHandle && author.username.toLowerCase() === officialHandle.toLowerCase();
+      const isFounder = isFounderLikeUser(author, projectName);
+      const sourceUrl = makeXPostUrl(author.username, tweet.id);
+      const gatewayUrl = makeXReceiptGatewayUrl(tweet.id, publicBaseUrl);
+
+      if (isFounder || isOfficial) {
+        const receipt = addDiscoveredReceipt(
+          receipts,
+          seenUrls,
+          `${author.name} X post`,
+          sourceUrl,
+          "founder_post",
+          isFounder ? 132 : 118,
+        );
+
+        if (!receipt) {
+          continue;
+        }
+
+        receipt.genlayerUrl = gatewayUrl || sourceUrl;
+        receipt.reason = isFounder
+          ? "Automated X crawl found a recent post by a founder-like account whose profile links the project."
+          : "Automated X crawl found a recent official project X post related to the claim.";
+        receipt.xAuthor = {
+          name: author.name,
+          username: author.username,
+          verified: Boolean(author.verified),
+          verifiedType: author.verified_type || "",
+        };
+        receipt.xPostId = tweet.id;
+        foundReceipts.push(receipt);
+      } else if (foundCandidates.length < 3) {
+        foundCandidates.push({
+          name: author.name,
+          username: author.username,
+          url: `https://x.com/${author.username}`,
+          reason: "Mentioned in an X result, but founder identity is not verified from profile text.",
+        });
+      }
+    }
+  }
+
+  return {
+    enabled: true,
+    status: foundReceipts.length
+      ? `X crawler found ${foundReceipts.length} candidate receipt${foundReceipts.length === 1 ? "" : "s"}.`
+      : "X crawler ran, but did not find a verified founder or official post receipt yet.",
+    candidates: foundCandidates,
+    receipts: foundReceipts,
+  };
+}
+
 function classifyDiscoveredUrl(url) {
   const lowerUrl = url.toLowerCase();
 
@@ -1227,20 +1547,23 @@ function addDiscoveredReceipt(receipts, seenUrls, title, url, sourceType, priori
   const dedupeKey = normalizedUrl.replace(/\/$/, "").toLowerCase();
 
   if (!normalizedUrl || seenUrls.has(dedupeKey)) {
-    return;
+    return null;
   }
 
   seenUrls.add(dedupeKey);
-  receipts.push({
+  const receipt = {
     title,
     url: normalizedUrl,
     type: sourceType || classifyDiscoveredUrl(normalizedUrl),
     priority,
     discoveryOnly,
-  });
+  };
+
+  receipts.push(receipt);
+  return receipt;
 }
 
-async function discoverProjectSources(claim, category, projectName) {
+async function discoverProjectSources(claim, category, projectName, publicBaseUrl = PUBLIC_BASE_URL) {
   const cleanProjectName = String(projectName || "").trim();
   const receipts = [];
   const seenUrls = new Set();
@@ -1262,6 +1585,19 @@ async function discoverProjectSources(claim, category, projectName) {
   }
 
   if (category === "founder_statement") {
+    const officialHandle = getOfficialXHandle(cleanProjectName);
+
+    if (officialHandle) {
+      addDiscoveredReceipt(
+        receipts,
+        seenUrls,
+        `${cleanProjectName} official X`,
+        `https://x.com/${officialHandle}`,
+        "x",
+        91,
+      );
+    }
+
     addDiscoveredReceipt(
       receipts,
       seenUrls,
@@ -1336,6 +1672,11 @@ async function discoverProjectSources(claim, category, projectName) {
     });
   }
 
+  const xScout =
+    category === "founder_statement"
+      ? await scoutFounderXReceipts(claim, cleanProjectName, receipts, seenUrls, publicBaseUrl)
+      : null;
+
   if (receipts.length === 1) {
     addDiscoveredReceipt(
       receipts,
@@ -1383,12 +1724,13 @@ async function discoverProjectSources(claim, category, projectName) {
     judgeStandard: makeJudgeStandard({ name: cleanProjectName }, category),
     receipts: scoredReceipts,
     sourceUrls: scoredReceipts.map((receipt) => receipt.url),
-    genlayerSourceUrls: genlayerReceipt ? [genlayerReceipt.url] : [],
+    genlayerSourceUrls: genlayerReceipt ? [getReceiptUrlForGenLayer(genlayerReceipt)] : [],
     bestReceipt,
     genlayerReceipt,
     projectId: "discovered",
     projectName: cleanProjectName,
     needsLiveDiscovery: true,
+    xScout,
   }, category);
 }
 
@@ -1448,11 +1790,49 @@ async function serveStatic(requestUrl, response) {
   }
 }
 
+function getRequestBaseUrl(request) {
+  const host = request.headers["x-forwarded-host"] || request.headers.host || "";
+  const protocol = request.headers["x-forwarded-proto"] || "http";
+
+  return host ? `${protocol}://${host}` : PUBLIC_BASE_URL;
+}
+
 const server = http.createServer(async (request, response) => {
   const requestUrl = new URL(request.url, `http://${request.headers.host || "localhost"}`);
 
   if (request.method === "GET" && requestUrl.pathname === "/api/health") {
     sendJson(response, 200, { ok: true, service: "cap-or-fact-scout" });
+    return;
+  }
+
+  if (request.method === "GET" && requestUrl.pathname.startsWith("/api/x-receipt/")) {
+    try {
+      const tweetId = decodeURIComponent(requestUrl.pathname.replace("/api/x-receipt/", "")).trim();
+
+      if (!tweetId) {
+        sendJson(response, 400, { ok: false, error: "Missing X post id." });
+        return;
+      }
+
+      if (!X_BEARER_TOKEN) {
+        sendJson(response, 503, {
+          ok: false,
+          error: "X receipt gateway is not connected. Add X_BEARER_TOKEN on the server.",
+        });
+        return;
+      }
+
+      const receipt = await fetchXPostReceipt(tweetId);
+
+      if (!receipt) {
+        sendJson(response, 404, { ok: false, error: "X post receipt not found." });
+        return;
+      }
+
+      sendJson(response, 200, { ok: true, receipt });
+    } catch (error) {
+      sendJson(response, 400, { ok: false, error: error.message });
+    }
     return;
   }
 
@@ -1462,7 +1842,7 @@ const server = http.createServer(async (request, response) => {
       const claim = String(body.claim || "").trim();
       const category = String(body.category || "airdrop_rumor");
       const projectName = String(body.projectName || "").trim();
-      const research = await discoverProjectSources(claim, category, projectName);
+      const research = await discoverProjectSources(claim, category, projectName, getRequestBaseUrl(request));
 
       sendJson(response, 200, { ok: true, claim, category, projectName, research });
     } catch (error) {
