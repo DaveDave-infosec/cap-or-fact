@@ -1366,6 +1366,94 @@ function isFounderLikeUser(user, projectName) {
   return founderSignal && projectSignal;
 }
 
+function compactIdentityText(text) {
+  return String(text || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isLikelyOfficialProjectUser(user, projectName) {
+  const compactProject = compactIdentityText(projectName);
+  const compactName = compactIdentityText(`${user.name || ""} ${user.username || ""}`);
+  const description = String(user.description || "").toLowerCase();
+  const hasProjectName = compactProject && (compactName.includes(compactProject) || description.includes(String(projectName || "").toLowerCase()));
+  const officialSignal =
+    Boolean(user.verified || user.verified_type) ||
+    /\b(official|foundation|protocol|network|labs|mainnet|chain|ai|web3)\b/.test(description);
+
+  return Boolean(hasProjectName && officialSignal);
+}
+
+function scoreXUserCandidate(user, projectName) {
+  let score = 0;
+  const haystack = `${user.name || ""} ${user.username || ""} ${user.description || ""}`.toLowerCase();
+  const compactProject = compactIdentityText(projectName);
+  const compactProfile = compactIdentityText(`${user.name || ""} ${user.username || ""}`);
+
+  if (compactProject && compactProfile.includes(compactProject)) score += 36;
+  if (projectName && haystack.includes(String(projectName).toLowerCase())) score += 34;
+  if (/\b(founder|cofounder|co-founder|ceo|creator)\b/.test(haystack)) score += 46;
+  if (/\b(official|foundation|protocol|network|labs)\b/.test(haystack)) score += 24;
+  if (user.verified || user.verified_type) score += 10;
+
+  return score;
+}
+
+async function searchXUserCandidates(projectName) {
+  const queries = [
+    `${projectName} founder`,
+    `${projectName} cofounder`,
+    `${projectName} co-founder`,
+    `${projectName} CEO`,
+    `${projectName} official`,
+  ];
+  const byUsername = new Map();
+
+  for (const query of queries) {
+    try {
+      const payload = await xApiGet("/2/users/search", {
+        query,
+        max_results: "10",
+        "user.fields": "description,entities,id,name,profile_image_url,public_metrics,url,username,verified,verified_type",
+      });
+
+      const users = payload && Array.isArray(payload.data) ? payload.data : [];
+
+      users.forEach((user) => {
+        const username = String(user.username || "").toLowerCase();
+
+        if (!username) {
+          return;
+        }
+
+        const score = scoreXUserCandidate(user, projectName);
+
+        if (score < 58) {
+          return;
+        }
+
+        const existing = byUsername.get(username);
+        const candidate = {
+          user,
+          score,
+          kind: isFounderLikeUser(user, projectName)
+            ? "founder"
+            : isLikelyOfficialProjectUser(user, projectName)
+              ? "official"
+              : "candidate",
+          query,
+        };
+
+        if (!existing || existing.score < candidate.score) {
+          byUsername.set(username, candidate);
+        }
+      });
+    } catch {
+      // User search is helpful but not required; tweet search can still run.
+    }
+  }
+
+  return [...byUsername.values()].sort((a, b) => b.score - a.score).slice(0, 5);
+}
+
 function makeXPostUrl(username, tweetId) {
   return `https://x.com/${username}/status/${tweetId}`;
 }
@@ -1432,17 +1520,70 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
   const officialHandle = getOfficialXHandle(projectName);
   const keywords = claimKeywords(claim).filter((word) => word !== projectName.toLowerCase());
   const keywordQuery = keywords.length ? keywords.slice(0, 5).join(" OR ") : "hint OR airdrop OR snapshot OR tge";
-  const queries = [
-    `"${projectName}" (founder OR cofounder OR "co-founder" OR CEO) (${keywordQuery}) -is:retweet`,
-    `"${projectName}" (${keywordQuery}) -is:retweet`,
-  ];
-
-  if (officialHandle) {
-    queries.unshift(`from:${officialHandle} (${keywordQuery}) -is:retweet`);
-  }
-
   const foundCandidates = [];
   const foundReceipts = [];
+  const profileCandidates = await searchXUserCandidates(projectName);
+  const trustedHandles = new Map();
+
+  profileCandidates.forEach((candidate) => {
+    const username = String(candidate.user.username || "").toLowerCase();
+
+    if (!username) {
+      return;
+    }
+
+    const isTrusted = candidate.kind === "founder" || candidate.kind === "official";
+    const profileUrl = `https://x.com/${candidate.user.username}`;
+
+    foundCandidates.push({
+      name: candidate.user.name,
+      username: candidate.user.username,
+      url: profileUrl,
+      reason:
+        candidate.kind === "founder"
+          ? "X user search found a founder-like profile linked to the project."
+          : candidate.kind === "official"
+            ? "X user search found an official-looking project profile."
+            : "X user search found a possible profile candidate, but it still needs verification.",
+    });
+
+    const profileReceipt = addDiscoveredReceipt(
+      receipts,
+      seenUrls,
+      `${candidate.user.name} X profile`,
+      profileUrl,
+      candidate.kind === "founder" ? "founder_x" : "x",
+      candidate.kind === "founder" ? 112 : 88,
+      true,
+    );
+
+    if (profileReceipt) {
+      profileReceipt.reason = foundCandidates[foundCandidates.length - 1].reason;
+    }
+
+    if (isTrusted) {
+      trustedHandles.set(username, candidate.kind);
+    }
+  });
+
+  const queries = [];
+
+  if (officialHandle) {
+    trustedHandles.set(officialHandle.toLowerCase(), "official");
+  }
+
+  trustedHandles.forEach((kind, username) => {
+    queries.push(`from:${username} (${keywordQuery}) -is:retweet`);
+  });
+
+  queries.push(
+    `"${projectName}" (founder OR cofounder OR "co-founder" OR CEO) (${keywordQuery}) -is:retweet`,
+    `"${projectName}" (${keywordQuery}) -is:retweet`,
+  );
+
+  if (officialHandle && !queries.some((query) => query.startsWith(`from:${officialHandle.toLowerCase()}`))) {
+    queries.unshift(`from:${officialHandle} (${keywordQuery}) -is:retweet`);
+  }
 
   for (const query of queries) {
     let payload = null;
@@ -1478,10 +1619,12 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
 
       const isOfficial = officialHandle && author.username.toLowerCase() === officialHandle.toLowerCase();
       const isFounder = isFounderLikeUser(author, projectName);
+      const trustedKind = trustedHandles.get(author.username.toLowerCase());
+      const isTrustedProfile = trustedKind === "founder" || trustedKind === "official";
       const sourceUrl = makeXPostUrl(author.username, tweet.id);
       const gatewayUrl = makeXReceiptGatewayUrl(tweet.id, publicBaseUrl);
 
-      if (isFounder || isOfficial) {
+      if (isFounder || isOfficial || isTrustedProfile) {
         const receipt = addDiscoveredReceipt(
           receipts,
           seenUrls,
@@ -1498,7 +1641,9 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
         receipt.genlayerUrl = gatewayUrl || sourceUrl;
         receipt.reason = isFounder
           ? "Automated X crawl found a recent post by a founder-like account whose profile links the project."
-          : "Automated X crawl found a recent official project X post related to the claim.";
+          : trustedKind === "founder"
+            ? "Automated X crawl found a recent post from a founder profile discovered by X user search."
+            : "Automated X crawl found a recent official project X post related to the claim.";
         receipt.xAuthor = {
           name: author.name,
           username: author.username,
@@ -1522,7 +1667,9 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
     enabled: true,
     status: foundReceipts.length
       ? `X crawler found ${foundReceipts.length} candidate receipt${foundReceipts.length === 1 ? "" : "s"}.`
-      : "X crawler ran, but did not find a verified founder or official post receipt yet.",
+      : foundCandidates.length
+        ? `X crawler found ${foundCandidates.length} profile candidate${foundCandidates.length === 1 ? "" : "s"}, but no exact claim post yet.`
+        : "X crawler ran, but did not find a verified founder or official post receipt yet.",
     candidates: foundCandidates,
     receipts: foundReceipts,
   };
