@@ -632,12 +632,24 @@ OFFICIAL_X_BY_PROJECT = {
 }
 
 
+FOUNDER_X_BY_PROJECT = {
+    "citrea": [
+        {
+            "name": "Orkun Kilic",
+            "title": "Orkun founder X",
+            "url": "https://x.com/0x_orkun",
+            "aliases": ["orkun", "orkun kilic", "orkun kılıç", "0x_orkun"],
+        }
+    ]
+}
+
+
 SOURCE_PROFILES = {
     "airdrop_rumor": {"x": 90, "blog": 75, "official": 38, "docs": 18, "github": 16},
     "snapshot_confirmation": {"x": 92, "blog": 72, "official": 45, "docs": 24, "github": 18},
     "token_info": {"official": 78, "docs": 68, "github": 48, "blog": 36, "x": 26},
     "exchange_listing": {"exchange": 92, "x": 75, "blog": 64, "official": 52, "docs": 24},
-    "founder_statement": {"x": 94, "blog": 58, "official": 48, "docs": 18},
+    "founder_statement": {"founder_x": 120, "x": 86, "blog": 58, "official": 48, "docs": 18},
     "partnership_claim": {"x": 84, "blog": 74, "official": 62, "docs": 24},
     "funding_raise": {"blog": 84, "newswire": 82, "x": 76, "official": 58, "docs": 22},
     "roadmap_check": {"docs": 72, "blog": 66, "official": 52, "x": 42, "github": 34},
@@ -678,6 +690,7 @@ SOURCE_REASON_PROFILES = {
         "docs": "Docs are usually secondary for listing claims.",
     },
     "founder_statement": {
+        "founder_x": "Founder X is the strongest source for direct comments, replies, and quoted statements.",
         "x": "Founder and official X posts are strongest for direct statement claims.",
         "blog": "Blogs help when the quote appears in a formal announcement.",
         "official": "Official pages can confirm the team position.",
@@ -788,13 +801,49 @@ def resolve_project(claim, project_id):
     return find_project_by_id(project_id) or find_project(claim)
 
 
-def get_project_receipts(project):
-    x_url = OFFICIAL_X_BY_PROJECT.get(project["id"])
+def is_founder_claim(claim, category):
+    return category == "founder_statement" or re.search(
+        r"\b(founder|cofounder|co-founder|ceo|orkun|said|says|hinted|quote)\b",
+        claim,
+        re.I,
+    ) is not None
 
-    if not x_url:
-        return project["receipts"]
+
+def get_founder_receipts(project, claim, category):
+    founders = FOUNDER_X_BY_PROJECT.get(project["id"], [])
+
+    if not founders or not is_founder_claim(claim, category):
+        return []
+
+    lower_claim = claim.lower()
+    matched_founders = [
+        founder
+        for founder in founders
+        if any(alias.lower() in lower_claim for alias in founder["aliases"])
+    ]
+    selected_founders = matched_founders or founders
 
     return [
+        {
+            "title": founder["title"],
+            "url": founder["url"],
+            "type": "founder_x",
+            "priority": 104,
+            "reason": f"Founder claim detected. {founder['name']}'s X account is the primary place to verify direct comments or replies.",
+        }
+        for founder in selected_founders
+    ]
+
+
+def get_project_receipts(project, claim="", category=""):
+    x_url = OFFICIAL_X_BY_PROJECT.get(project["id"])
+    founder_receipts = get_founder_receipts(project, claim, category)
+
+    if not x_url:
+        return [*founder_receipts, *project["receipts"]]
+
+    return [
+        *founder_receipts,
         {
             "title": f"{project['name']} official X",
             "url": x_url,
@@ -844,6 +893,8 @@ def score_receipt(receipt, claim, category):
         score += 4
     if "twitter.com" in haystack or "x.com" in haystack:
         score += 8
+    if receipt["type"] == "founder_x" and is_founder_claim(claim, category):
+        score += 120
 
     if category == "airdrop_rumor":
         if "tge" in lower_claim or "airdrop" in lower_claim or "claim" in lower_claim:
@@ -868,6 +919,8 @@ def score_receipt(receipt, claim, category):
 
     if category == "exchange_listing" and "listing" in haystack:
         score += 16
+    if category == "founder_statement" and receipt["type"] == "founder_x":
+        score += 26
     if category == "founder_statement" and ("founder" in haystack or receipt["type"] == "x"):
         score += 14
     if category == "partnership_claim" and ("partner" in haystack or "partnership" in haystack or "integration" in haystack):
@@ -926,7 +979,11 @@ def is_same_receipt(first, second):
 
 
 def can_genlayer_fetch_receipt(receipt):
-    return bool(receipt and not receipt.get("discoveryOnly") and receipt["type"] not in ["x", "directory", "search"])
+    return bool(
+        receipt
+        and not receipt.get("discoveryOnly")
+        and receipt["type"] not in ["founder_x", "x", "directory", "search"]
+    )
 
 
 def choose_genlayer_receipt(receipts):
@@ -934,7 +991,7 @@ def choose_genlayer_receipt(receipts):
         if can_genlayer_fetch_receipt(receipt):
             return receipt
     for receipt in receipts:
-        if receipt and not receipt.get("discoveryOnly") and receipt["type"] not in ["x", "search"]:
+        if receipt and not receipt.get("discoveryOnly") and receipt["type"] not in ["founder_x", "x", "search"]:
             return receipt
     return None
 
@@ -981,7 +1038,7 @@ def scout_claim(claim, category, project_id="auto"):
         }
 
     receipts = []
-    for receipt in get_project_receipts(project):
+    for receipt in get_project_receipts(project, claim, category):
         scored_receipt = dict(receipt)
         scored_receipt["score"] = score_receipt(receipt, claim, category)
         scored_receipt["reason"] = receipt.get("reason") or explain_receipt_choice(receipt, category)
@@ -1130,6 +1187,13 @@ def discover_project_sources(claim, category, project_name):
         (f"site:cryptorank.io {project_name}", 80),
     ]
 
+    if category == "founder_statement":
+        search_plan = [
+            (f"{project_name} founder X account", 88),
+            (f"{project_name} founder twitter", 84),
+            *search_plan,
+        ]
+
     for query, priority in search_plan:
         for result in search_web(query, limit=3):
             source_type = classify_discovered_url(result["url"])
@@ -1146,6 +1210,16 @@ def discover_project_sources(claim, category, project_name):
             45,
             True,
         )
+        if category == "founder_statement":
+            add_discovered_receipt(
+                receipts,
+                seen_urls,
+                f"Search founder X for {project_name}",
+                "https://x.com/search?q=" + quote_plus(project_name + " founder"),
+                "search",
+                48,
+                True,
+            )
         add_discovered_receipt(
             receipts,
             seen_urls,

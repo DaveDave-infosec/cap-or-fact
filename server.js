@@ -625,14 +625,53 @@ const officialXByProject = {
   fluent: "https://x.com/fluentxyz",
 };
 
-function getProjectReceipts(project) {
+const founderXByProject = {
+  citrea: [
+    {
+      name: "Orkun Kilic",
+      title: "Orkun founder X",
+      url: "https://x.com/0x_orkun",
+      aliases: ["orkun", "orkun kilic", "orkun kılıç", "0x_orkun"],
+    },
+  ],
+};
+
+function isFounderClaim(claim, category) {
+  return category === "founder_statement" || /\b(founder|cofounder|co-founder|ceo|orkun|said|says|hinted|quote)\b/i.test(claim);
+}
+
+function getFounderReceipts(project, claim, category) {
+  const founders = founderXByProject[project.id] || [];
+
+  if (!founders.length || !isFounderClaim(claim, category)) {
+    return [];
+  }
+
+  const lowerClaim = claim.toLowerCase();
+  const matchedFounders = founders.filter((founder) =>
+    founder.aliases.some((alias) => lowerClaim.includes(alias.toLowerCase())),
+  );
+  const selectedFounders = matchedFounders.length > 0 ? matchedFounders : founders;
+
+  return selectedFounders.map((founder) => ({
+    title: founder.title,
+    url: founder.url,
+    type: "founder_x",
+    priority: 104,
+    reason: `Founder claim detected. ${founder.name}'s X account is the primary place to verify direct comments or replies.`,
+  }));
+}
+
+function getProjectReceipts(project, claim = "", category = "") {
   const xUrl = officialXByProject[project.id];
+  const founderReceipts = getFounderReceipts(project, claim, category);
 
   if (!xUrl) {
-    return project.receipts;
+    return [...founderReceipts, ...project.receipts];
   }
 
   return [
+    ...founderReceipts,
     {
       title: `${project.name} official X`,
       url: xUrl,
@@ -648,7 +687,7 @@ const sourceProfiles = {
   snapshot_confirmation: { x: 92, blog: 72, official: 45, docs: 24, github: 18 },
   token_info: { official: 78, docs: 68, github: 48, blog: 36, x: 26 },
   exchange_listing: { exchange: 92, x: 75, blog: 64, official: 52, docs: 24 },
-  founder_statement: { x: 94, blog: 58, official: 48, docs: 18 },
+  founder_statement: { founder_x: 120, x: 86, blog: 58, official: 48, docs: 18 },
   partnership_claim: { x: 84, blog: 74, official: 62, docs: 24 },
   funding_raise: { blog: 84, newswire: 82, x: 76, official: 58, docs: 22 },
   roadmap_check: { docs: 72, blog: 66, official: 52, x: 42, github: 34 },
@@ -688,6 +727,7 @@ const sourceReasonProfiles = {
     docs: "Docs are usually secondary for listing claims.",
   },
   founder_statement: {
+    founder_x: "Founder X is the strongest source for direct comments, replies, and quoted statements.",
     x: "Founder and official X posts are strongest for direct statement claims.",
     blog: "Blogs help when the quote appears in a formal announcement.",
     official: "Official pages can confirm the team position.",
@@ -835,6 +875,7 @@ function scoreReceipt(receipt, claim, category) {
   if (haystack.includes("raw.githubusercontent.com")) score += category === "token_info" ? 18 : 6;
   if (haystack.includes("blog") || haystack.includes("mirror.xyz")) score += 4;
   if (haystack.includes("twitter.com") || haystack.includes("x.com")) score += 8;
+  if (receipt.type === "founder_x" && isFounderClaim(claim, category)) score += 120;
 
   if (category === "airdrop_rumor") {
     if (lowerClaim.includes("tge") || lowerClaim.includes("airdrop") || lowerClaim.includes("claim")) {
@@ -855,6 +896,7 @@ function scoreReceipt(receipt, claim, category) {
   }
 
   if (category === "exchange_listing" && haystack.includes("listing")) score += 16;
+  if (category === "founder_statement" && receipt.type === "founder_x") score += 26;
   if (category === "founder_statement" && (haystack.includes("founder") || receipt.type === "x")) score += 14;
   if (category === "partnership_claim" && (haystack.includes("partner") || haystack.includes("partnership") || haystack.includes("integration"))) score += 16;
   if (category === "funding_raise" && (haystack.includes("funding") || haystack.includes("raise") || haystack.includes("investor") || haystack.includes("seed") || haystack.includes("series"))) score += 16;
@@ -885,13 +927,27 @@ function isSameReceipt(first, second) {
 }
 
 function canGenLayerFetchReceipt(receipt) {
-  return receipt && !receipt.discoveryOnly && receipt.type !== "x" && receipt.type !== "directory" && receipt.type !== "search";
+  return (
+    receipt &&
+    !receipt.discoveryOnly &&
+    receipt.type !== "founder_x" &&
+    receipt.type !== "x" &&
+    receipt.type !== "directory" &&
+    receipt.type !== "search"
+  );
 }
 
 function chooseGenLayerReceipt(receipts) {
   return (
     receipts.find((receipt) => canGenLayerFetchReceipt(receipt)) ||
-    receipts.find((receipt) => receipt && !receipt.discoveryOnly && receipt.type !== "x" && receipt.type !== "search") ||
+    receipts.find(
+      (receipt) =>
+        receipt &&
+        !receipt.discoveryOnly &&
+        receipt.type !== "founder_x" &&
+        receipt.type !== "x" &&
+        receipt.type !== "search",
+    ) ||
     null
   );
 }
@@ -952,7 +1008,7 @@ function scoutClaim(claim, category, projectId = "auto") {
     };
   }
 
-  const receipts = rankReceipts(getProjectReceipts(project), claim, category);
+  const receipts = rankReceipts(getProjectReceipts(project, claim, category), claim, category);
 
   const bestReceipt = receipts[0] || null;
   const genlayerReceipt = chooseGenLayerReceipt(receipts);
@@ -1123,6 +1179,13 @@ async function discoverProjectSources(claim, category, projectName) {
     [`site:cryptorank.io ${cleanProjectName}`, 80],
   ];
 
+  if (category === "founder_statement") {
+    searchPlan.unshift(
+      [`${cleanProjectName} founder X account`, 88],
+      [`${cleanProjectName} founder twitter`, 84],
+    );
+  }
+
   for (const [query, priority] of searchPlan) {
     const results = await searchWeb(query, 3);
 
@@ -1141,6 +1204,17 @@ async function discoverProjectSources(claim, category, projectName) {
       45,
       true,
     );
+    if (category === "founder_statement") {
+      addDiscoveredReceipt(
+        receipts,
+        seenUrls,
+        `Search founder X for ${cleanProjectName}`,
+        `https://x.com/search?q=${encodeURIComponent(`${cleanProjectName} founder`)}`,
+        "search",
+        48,
+        true,
+      );
+    }
     addDiscoveredReceipt(
       receipts,
       seenUrls,

@@ -154,7 +154,7 @@ Cap or Fact now ranks receipts by claim type instead of treating every claim lik
 - Airdrop/TGE and snapshot claims favor official X/blog announcement sources first.
 - Tokenomics claims favor token pages, docs, and GitHub READMEs.
 - Exchange claims favor exchange pages, official X, and announcement blogs.
-- Founder statements favor primary social posts and official announcements.
+- Founder statements favor the founder's own X account first, then official X and announcement pages.
 - Partnership and funding claims favor official X/blog posts and named partner/investor sources.
 - Roadmap and grant claims favor official docs, blog posts, and program pages.
 - Security claims favor status pages, official X, and postmortems.

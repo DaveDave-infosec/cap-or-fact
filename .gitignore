@@ -8,3 +8,5 @@ dist/
 *.log
 argtest*.txt
 git-store/
+edge-profile/
+pdf-images/
