@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cap or Fact</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero" aria-label="Cap or Fact header">
+        <div>
+          <p class="eyebrow">GenLayer claim court</p>
+          <h1>Cap or Fact</h1>
+          <p class="dek">Ask a claim. The app hunts for receipts. GenLayer puts the answer onchain.</p>
+        </div>
+        <div class="mini-stats" aria-label="Verdict labels">
+          <span class="fact">FACT</span>
+          <span class="cap">CAP</span>
+          <span class="unclear">UNCLEAR</span>
+        </div>
+      </section>
+
+      <section class="proof-strip builder-only" aria-label="GenLayer verified result" hidden>
+        <div>
+          <span>Studio-tested example</span>
+          <strong>Citrea TGE demo returned CAP</strong>
+          <code>0x09845790DE3cF5C5F048C1a9a18B0317526A12f0</code>
+        </div>
+        <p>Saved GenLayer proof: the contract fetched Citrea's official README, the AI judge read it, and the verdict was stored onchain.</p>
+      </section>
+
+      <section class="workspace">
+        <form class="panel claim-form" id="claim-form">
+          <div class="panel-heading">
+            <h2>Build A Case</h2>
+            <button class="icon-button" type="button" id="load-sample" title="Load sample claim" aria-label="Load sample claim">
+              <span aria-hidden="true">R</span>
+            </button>
+          </div>
+
+          <label>
+            Claim
+            <textarea id="claim" name="claim" placeholder="Has Monad announced an official airdrop snapshot date?"></textarea>
+          </label>
+
+          <section class="quality-box" id="claim-quality" aria-live="polite">
+            <div class="quality-heading">
+              <span>Claim Quality</span>
+              <strong id="quality-status">Good claim</strong>
+            </div>
+            <p id="quality-summary">Clear enough for the scout.</p>
+            <ul id="quality-list"></ul>
+          </section>
+
+          <label>
+            Project
+            <select id="project" name="project">
+              <option value="auto" selected>Auto detect</option>
+              <option value="base">Base</option>
+              <option value="arbitrum">Arbitrum</option>
+              <option value="polymarket">Polymarket</option>
+              <option value="opensea">OpenSea</option>
+              <option value="genlayer">GenLayer</option>
+              <option value="arc">Arc</option>
+              <option value="sentient">Sentient</option>
+              <option value="citrea">Citrea</option>
+              <option value="monad">Monad</option>
+              <option value="megaeth">MegaETH</option>
+              <option value="berachain">Berachain</option>
+              <option value="initia">Initia</option>
+              <option value="eclipse">Eclipse</option>
+              <option value="succinct">Succinct</option>
+              <option value="movement">Movement</option>
+              <option value="espresso">Espresso</option>
+              <option value="camp">Camp Network</option>
+              <option value="story">Story Protocol</option>
+              <option value="hemi">Hemi</option>
+              <option value="botanix">Botanix</option>
+              <option value="somnia">Somnia</option>
+              <option value="rialo">Rialo</option>
+              <option value="seismic">Seismic</option>
+              <option value="fluent">Fluent</option>
+            </select>
+          </label>
+
+          <label>
+            Claim Type
+            <select id="category" name="category">
+              <option value="airdrop_rumor" selected>Airdrop / TGE rumor</option>
+              <option value="snapshot_confirmation">Snapshot confirmation</option>
+              <option value="token_info">Token / tokenomics claim</option>
+              <option value="exchange_listing">Exchange listing</option>
+              <option value="founder_statement">Founder statement</option>
+              <option value="partnership_claim">Partnership claim</option>
+              <option value="funding_raise">Funding / raise claim</option>
+              <option value="roadmap_check">Roadmap check</option>
+              <option value="grant_deadline">Grant deadline</option>
+              <option value="security_incident">Security incident</option>
+              <option value="protocol_metrics">Revenue / TVL claim</option>
+              <option value="regulatory_claim">Regulatory claim</option>
+            </select>
+          </label>
+
+          <section class="research-box" aria-label="Evidence scout">
+            <div class="research-heading">
+              <span>Evidence Scout</span>
+              <strong id="research-mode">official sources</strong>
+            </div>
+            <p id="research-status">Scanning for official Citrea receipts.</p>
+            <ul id="receipt-list"></ul>
+          </section>
+
+          <div class="actions">
+            <button type="submit" id="preview-button">Scout Claim</button>
+            <button type="button" class="secondary builder-only" id="copy-args">Copy Contract Case</button>
+          </div>
+        </form>
+
+        <section class="stage" aria-label="Verdict preview">
+          <div class="verdict-card" id="verdict-card">
+            <div class="case-topline">
+              <span id="case-category">airdrop_rumor</span>
+              <span id="case-confidence">ready for GenLayer</span>
+            </div>
+
+            <div class="stamp" id="verdict-stamp">ON TRIAL</div>
+
+            <article>
+              <h2 id="claim-title">Untitled claim</h2>
+              <p id="receipt-summary">Write a claim first. Cap or Fact will then scout official receipts before GenLayer judges it.</p>
+            </article>
+
+            <div class="source-strip">
+              <span id="source-label">GenLayer receipt</span>
+              <strong id="source-count">Selected</strong>
+            </div>
+
+            <div class="share-footer">
+              <span>Cap or Fact</span>
+              <strong id="share-status">Source-backed claim</strong>
+            </div>
+          </div>
+
+          <div class="ticker" aria-label="Sample claim feed">
+            <span>airdrop snapshot?</span>
+            <span>exchange listing?</span>
+            <span>funding round?</span>
+            <span>security incident?</span>
+          </div>
+
+          <div class="share-actions">
+            <button type="button" id="copy-share-text">Copy Share Text</button>
+          </div>
+        </section>
+
+        <section class="panel output-panel" aria-label="Case feed and builder output">
+          <div class="panel-heading">
+            <h2 id="right-panel-title">Case Feed</h2>
+            <div class="panel-actions">
+              <button class="subtle-action" type="button" id="clear-history">Clear History</button>
+              <button class="icon-button small builder-only" type="button" id="copy-json" title="Copy JSON" aria-label="Copy JSON">
+                <span aria-hidden="true">C</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="feed-intro">
+            <strong>Recent Cases</strong>
+            <p>The last five scouted claims appear here with their latest evidence and verdict status.</p>
+          </div>
+
+          <ul class="case-feed" id="case-feed"></ul>
+
+          <div class="builder-tools" id="builder-tools" hidden>
+            <div class="explain-box">
+              <strong>Builder payload</strong>
+              <p>The public app hides this. These are the values used in AI Simple V1's set_case method.</p>
+            </div>
+
+            <pre id="constructor-json"></pre>
+
+            <section class="studio-run" aria-label="Studio run">
+              <div class="studio-run-heading">
+                <div>
+                  <span>Studio Run</span>
+                  <strong id="studio-status">Waiting for receipt</strong>
+                </div>
+                <button type="button" class="secondary small-action" id="copy-studio-steps">Copy Steps</button>
+              </div>
+
+              <ol class="studio-steps" id="studio-steps">
+                <li data-flow-step="set_case">
+                  <span>1</span>
+                  <div>
+                    <strong>set_case</strong>
+                    <p>claim + claim type + GenLayer receipt</p>
+                  </div>
+                </li>
+                <li data-flow-step="fetch_receipt">
+                  <span>2</span>
+                  <div>
+                    <strong>fetch_receipt</strong>
+                    <p>GenLayer opens the receipt URL</p>
+                  </div>
+                </li>
+                <li data-flow-step="judge_with_ai">
+                  <span>3</span>
+                  <div>
+                    <strong>judge_with_ai</strong>
+                    <p>AI returns FACT, CAP, or UNCLEAR</p>
+                  </div>
+                </li>
+                <li data-flow-step="get_result">
+                  <span>4</span>
+                  <div>
+                    <strong>get_result</strong>
+                    <p>read the stored verdict</p>
+                  </div>
+                </li>
+              </ol>
+
+              <div class="sim-result">
+                <span>Result Preview</span>
+                <strong id="sim-result">Scout a claim first.</strong>
+              </div>
+            </section>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

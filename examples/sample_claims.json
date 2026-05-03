@@ -1,0 +1,54 @@
+[
+  {
+    "claim": "Citrea has announced a TGE for a native Citrea token.",
+    "project": "citrea",
+    "category": "airdrop_rumor",
+    "judge_standard": "Return FACT only if an official Citrea source confirms a native Citrea token TGE. Return CAP if official Citrea sources say there is no Citrea token. Return UNCLEAR if the sources are unofficial, stale, or indirect.",
+    "source_urls": [
+      "https://raw.githubusercontent.com/chainwayxyz/citrea/nightly/README.md",
+      "https://www.blog.citrea.xyz/citrea-mainnet-is-live/",
+      "https://www.blog.citrea.xyz/citrea-introduces-the-citrea-foundation/"
+    ]
+  },
+  {
+    "claim": "Has Monad announced an airdrop snapshot?",
+    "project": "monad",
+    "category": "airdrop_rumor",
+    "judge_standard": "Return FACT only if official Monad sources confirm an airdrop snapshot. Return CAP if official Monad sources contradict it. Return UNCLEAR if evidence is rumor-based or unofficial.",
+    "source_urls": [
+      "https://docs.monad.xyz/",
+      "https://docs.monad.xyz/resources/official-links",
+      "https://blog.monad.xyz/"
+    ]
+  },
+  {
+    "claim": "MegaETH has published an official token page.",
+    "project": "megaeth",
+    "category": "token_info",
+    "judge_standard": "Return FACT only if official MegaETH sources confirm the token page. Return CAP if official sources contradict it. Return UNCLEAR if evidence is indirect.",
+    "source_urls": [
+      "https://www.megaeth.com/token",
+      "https://docs.megaeth.com/"
+    ]
+  },
+  {
+    "claim": "Berachain docs include BERA staking information.",
+    "project": "berachain",
+    "category": "token_info",
+    "judge_standard": "Return FACT only if official Berachain docs confirm BERA staking information. Return CAP if official sources contradict it. Return UNCLEAR if evidence is incomplete.",
+    "source_urls": [
+      "https://docs.berachain.com/",
+      "https://docs.berachain.com/learn/guides/bera-staking"
+    ]
+  },
+  {
+    "claim": "Initia has published INIT tokenomics.",
+    "project": "initia",
+    "category": "token_info",
+    "judge_standard": "Return FACT only if official Initia docs confirm INIT tokenomics. Return CAP if official sources contradict it. Return UNCLEAR if evidence is incomplete.",
+    "source_urls": [
+      "https://docs.initia.xyz/",
+      "https://docs.initia.xyz/home/core-concepts/init-token/tokenomics"
+    ]
+  }
+]

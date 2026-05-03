@@ -1,0 +1,13 @@
+{
+  "name": "cap-or-fact",
+  "version": "0.1.0",
+  "description": "A GenLayer-powered claim court for crypto rumors and official receipts.",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check app/app.js && node --check server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
