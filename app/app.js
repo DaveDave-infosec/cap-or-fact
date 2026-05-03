@@ -1,31 +1,3 @@
-const samples = [
-  {
-    claim: "Citrea has announced a TGE for a native Citrea token.",
-    project: "citrea",
-    category: "airdrop_rumor",
-  },
-  {
-    claim: "Has Monad announced an airdrop snapshot?",
-    project: "monad",
-    category: "airdrop_rumor",
-  },
-  {
-    claim: "MegaETH has published an official token page.",
-    project: "megaeth",
-    category: "token_info",
-  },
-  {
-    claim: "Berachain docs include BERA staking information.",
-    project: "berachain",
-    category: "token_info",
-  },
-  {
-    claim: "Initia has published INIT tokenomics.",
-    project: "initia",
-    category: "token_info",
-  },
-];
-
 const projectRegistry = [
   {
     id: "base",
@@ -597,7 +569,9 @@ function getProjectReceipts(project) {
 }
 
 const form = document.querySelector("#claim-form");
-const sampleButton = document.querySelector("#load-sample");
+const claimBackButton = document.querySelector("#claim-back");
+const claimForwardButton = document.querySelector("#claim-forward");
+const resetClaimButton = document.querySelector("#reset-claim");
 const previewButton = document.querySelector("#preview-button");
 const copyArgsButton = document.querySelector("#copy-args");
 const copyJsonButton = document.querySelector("#copy-json");
@@ -812,12 +786,15 @@ const projectGuessStopWords = new Set([
   "tvl",
 ]);
 
-let sampleIndex = -1;
 let activeScout = null;
 let displayedCase = null;
 let recentCases = [];
+let claimHistory = [];
+let claimHistoryIndex = 0;
 const maxRecentCases = 5;
+const maxClaimHistory = 20;
 const recentCasesStorageKey = "cap-or-fact-recent-cases";
+const claimHistoryStorageKey = "cap-or-fact-claim-history";
 
 function loadRecentCases() {
   try {
@@ -834,8 +811,83 @@ function saveRecentCases() {
 
 function clearRecentCases() {
   recentCases = [];
+  claimHistory = [];
+  claimHistoryIndex = 0;
   saveRecentCases();
+  saveClaimHistory();
   renderCaseFeed();
+  updateClaimNavControls();
+}
+
+function loadClaimHistory() {
+  try {
+    const savedClaims = JSON.parse(window.localStorage.getItem(claimHistoryStorageKey) || "[]");
+    claimHistory = Array.isArray(savedClaims) ? savedClaims.slice(0, maxClaimHistory) : [];
+  } catch {
+    claimHistory = [];
+  }
+
+  claimHistoryIndex = claimHistory.length;
+}
+
+function saveClaimHistory() {
+  window.localStorage.setItem(claimHistoryStorageKey, JSON.stringify(claimHistory.slice(0, maxClaimHistory)));
+}
+
+function rememberClaimSearch(data) {
+  const claim = data.claim.trim();
+
+  if (!claim) {
+    return;
+  }
+
+  const entry = {
+    claim,
+    project: data.project,
+    category: data.category,
+  };
+
+  claimHistory = claimHistory.filter(
+    (item) =>
+      item.claim.toLowerCase() !== claim.toLowerCase() ||
+      item.project !== entry.project ||
+      item.category !== entry.category,
+  );
+  claimHistory.push(entry);
+  claimHistory = claimHistory.slice(-maxClaimHistory);
+  claimHistoryIndex = claimHistory.length;
+  saveClaimHistory();
+}
+
+function updateClaimNavControls() {
+  claimBackButton.disabled = claimHistory.length === 0 || claimHistoryIndex <= 0;
+  claimForwardButton.disabled = claimHistory.length === 0 || claimHistoryIndex >= claimHistory.length - 1;
+}
+
+function loadClaimHistoryEntry(index) {
+  const entry = claimHistory[index];
+
+  if (!entry) {
+    return;
+  }
+
+  claimHistoryIndex = index;
+  activeScout = null;
+  displayedCase = null;
+  document.querySelector("#claim").value = entry.claim;
+  document.querySelector("#project").value = entry.project || "auto";
+  document.querySelector("#category").value = entry.category || "airdrop_rumor";
+  renderPreview();
+}
+
+function resetClaimBox() {
+  activeScout = null;
+  displayedCase = null;
+  claimHistoryIndex = claimHistory.length;
+  document.querySelector("#claim").value = "";
+  document.querySelector("#project").value = "auto";
+  document.querySelector("#category").value = "airdrop_rumor";
+  renderPreview();
 }
 
 function applyBuilderMode() {
@@ -1635,6 +1687,7 @@ function renderPreview() {
   renderJson(data);
   renderStudioRun(data, preview);
   renderCaseFeed();
+  updateClaimNavControls();
 }
 
 function flashButton(button, text, resetText) {
@@ -1646,14 +1699,6 @@ function flashButton(button, text, resetText) {
     button.textContent = originalText;
     button.classList.remove("is-confirming");
   }, 1100);
-}
-
-function setSample(sample) {
-  activeScout = null;
-  document.querySelector("#claim").value = sample.claim;
-  document.querySelector("#project").value = sample.project || "auto";
-  document.querySelector("#category").value = sample.category;
-  renderPreview();
 }
 
 async function copyText(text) {
@@ -1734,6 +1779,7 @@ async function runScout() {
       const data = readForm();
       const preview = previewCase(data);
       displayedCase = { data, preview };
+      rememberClaimSearch(data);
       rememberCase(makeCaseRow(data, preview));
       renderPreview();
       flashButton(previewButton, "Sources Found", defaultText);
@@ -1768,6 +1814,7 @@ async function runScout() {
     const data = readForm();
     const preview = previewCase(data);
     displayedCase = { data, preview };
+    rememberClaimSearch(data);
     rememberCase(makeCaseRow(data, preview));
     renderPreview();
     flashButton(previewButton, "Scout Found", defaultText);
@@ -1788,12 +1835,21 @@ form.addEventListener("submit", (event) => {
 form.addEventListener("input", () => {
   activeScout = null;
   displayedCase = null;
+  claimHistoryIndex = claimHistory.length;
   renderPreview();
 });
 
-sampleButton.addEventListener("click", () => {
-  sampleIndex = (sampleIndex + 1) % samples.length;
-  setSample(samples[sampleIndex]);
+claimBackButton.addEventListener("click", () => {
+  loadClaimHistoryEntry(claimHistoryIndex - 1);
+});
+
+claimForwardButton.addEventListener("click", () => {
+  loadClaimHistoryEntry(claimHistoryIndex + 1);
+});
+
+resetClaimButton.addEventListener("click", () => {
+  resetClaimBox();
+  flashButton(resetClaimButton, "Cleared", "Reset");
 });
 
 copyArgsButton.addEventListener("click", () => {
@@ -1911,5 +1967,6 @@ function seedInitialVerifiedCase() {
 }
 
 loadRecentCases();
+loadClaimHistory();
 renderPreview();
 applyBuilderMode();

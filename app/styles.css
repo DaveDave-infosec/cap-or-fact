@@ -189,6 +189,12 @@ h1 {
   align-items: center;
 }
 
+.claim-nav {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
 h2 {
   margin-bottom: 0;
   font-size: 1rem;
@@ -476,6 +482,20 @@ button.secondary.is-confirming {
   width: 32px;
   height: 32px;
   min-height: 32px;
+}
+
+.reset-button {
+  min-height: 32px;
+  padding: 0 11px;
+  color: var(--text);
+  border: 1px solid var(--line);
+  background: #20262d;
+  font-size: 0.75rem;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
 }
 
 .stage {

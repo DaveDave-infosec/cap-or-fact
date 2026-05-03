@@ -34,9 +34,15 @@
         <form class="panel claim-form" id="claim-form">
           <div class="panel-heading">
             <h2>Build A Case</h2>
-            <button class="icon-button" type="button" id="load-sample" title="Load sample claim" aria-label="Load sample claim">
-              <span aria-hidden="true">R</span>
-            </button>
+            <div class="claim-nav" aria-label="Claim controls">
+              <button class="icon-button small" type="button" id="claim-back" title="Previous searched claim" aria-label="Previous searched claim">
+                <span aria-hidden="true">&larr;</span>
+              </button>
+              <button class="reset-button" type="button" id="reset-claim" title="Clear claim box">Reset</button>
+              <button class="icon-button small" type="button" id="claim-forward" title="Next searched claim" aria-label="Next searched claim">
+                <span aria-hidden="true">&rarr;</span>
+              </button>
+            </div>
           </div>
 
           <label>
