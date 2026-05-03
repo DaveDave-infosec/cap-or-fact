@@ -551,6 +551,20 @@ const officialXByProject = {
 };
 
 const founderXByProject = {
+  sentient: [
+    {
+      name: "Sandeep Nailwal",
+      title: "Sandeep Nailwal founder X",
+      url: "https://x.com/sandeepnailwal",
+      aliases: ["sandeep", "sandeep nailwal", "sandeepnailwal"],
+    },
+    {
+      name: "Himanshu Tyagi",
+      title: "Himanshu Tyagi founder X",
+      url: "https://x.com/hstyagi",
+      aliases: ["himanshu", "himanshu tyagi", "hstyagi"],
+    },
+  ],
   citrea: [
     {
       name: "Orkun Kilic",

@@ -629,6 +629,20 @@ const officialXByProject = {
 };
 
 const founderXByProject = {
+  sentient: [
+    {
+      name: "Sandeep Nailwal",
+      title: "Sandeep Nailwal founder X",
+      url: "https://x.com/sandeepnailwal",
+      aliases: ["sandeep", "sandeep nailwal", "sandeepnailwal"],
+    },
+    {
+      name: "Himanshu Tyagi",
+      title: "Himanshu Tyagi founder X",
+      url: "https://x.com/hstyagi",
+      aliases: ["himanshu", "himanshu tyagi", "hstyagi"],
+    },
+  ],
   citrea: [
     {
       name: "Orkun Kilic",
@@ -1083,7 +1097,15 @@ function rankReceipts(receipts, claim, category) {
     .sort((a, b) => b.score - a.score);
 }
 
-function scoutClaim(claim, category, projectId = "auto") {
+function makeSeenUrlSet(receipts) {
+  return new Set(
+    receipts
+      .map((receipt) => String(receipt.url || "").trim().replace(/\/$/, "").toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+async function scoutClaim(claim, category, projectId = "auto", publicBaseUrl = PUBLIC_BASE_URL) {
   const project = resolveProject(claim, projectId);
 
   if (!claim.trim()) {
@@ -1117,7 +1139,13 @@ function scoutClaim(claim, category, projectId = "auto") {
     }, category);
   }
 
-  const receipts = rankReceipts(getProjectReceipts(project, claim, category), claim, category);
+  const receiptCandidates = getProjectReceipts(project, claim, category);
+  const seenUrls = makeSeenUrlSet(receiptCandidates);
+  const xScout =
+    category === "founder_statement"
+      ? await scoutFounderXReceipts(claim, project.name, receiptCandidates, seenUrls, publicBaseUrl)
+      : null;
+  const receipts = rankReceipts(receiptCandidates, claim, category);
 
   const bestReceipt = receipts[0] || null;
   const genlayerReceipt = chooseGenLayerReceipt(receipts);
@@ -1133,6 +1161,7 @@ function scoutClaim(claim, category, projectId = "auto") {
     genlayerReceipt,
     projectId: project.id,
     projectName: project.name,
+    xScout,
   }, category);
 }
 
@@ -1524,30 +1553,61 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
   const keywordQuery = keywords.length ? keywords.slice(0, 5).join(" OR ") : "hint OR airdrop OR snapshot OR tge";
   const foundCandidates = [];
   const foundReceipts = [];
-  const profileCandidates = await searchXUserCandidates(projectName);
   const trustedHandles = new Map();
+  const candidateHandles = new Set();
+
+  function addProfileCandidate(name, username, url, reason) {
+    const normalizedUsername = String(username || "").toLowerCase();
+
+    if (!normalizedUsername || candidateHandles.has(normalizedUsername)) {
+      return;
+    }
+
+    candidateHandles.add(normalizedUsername);
+    foundCandidates.push({ name, username, url, reason });
+  }
+
+  receipts.forEach((receipt) => {
+    const handle = extractXHandle(receipt.url);
+
+    if (!handle) {
+      return;
+    }
+
+    if (receipt.type === "founder_x") {
+      trustedHandles.set(handle.toLowerCase(), "founder");
+      addProfileCandidate(
+        receipt.title.replace(/\s+founder X$/i, ""),
+        handle,
+        `https://x.com/${handle}`,
+        "Mapped founder account from the project registry.",
+      );
+    }
+
+    if (receipt.type === "x") {
+      trustedHandles.set(handle.toLowerCase(), "official");
+    }
+  });
+  const profileCandidates = await searchXUserCandidates(projectName);
 
   profileCandidates.forEach((candidate) => {
     const username = String(candidate.user.username || "").toLowerCase();
 
-    if (!username) {
+    if (!username || (candidate.kind !== "founder" && candidate.kind !== "official")) {
       return;
     }
 
     const isTrusted = candidate.kind === "founder" || candidate.kind === "official";
     const profileUrl = `https://x.com/${candidate.user.username}`;
 
-    foundCandidates.push({
-      name: candidate.user.name,
-      username: candidate.user.username,
-      url: profileUrl,
-      reason:
-        candidate.kind === "founder"
-          ? "X user search found a founder-like profile linked to the project."
-          : candidate.kind === "official"
-            ? "X user search found an official-looking project profile."
-            : "X user search found a possible profile candidate, but it still needs verification.",
-    });
+    addProfileCandidate(
+      candidate.user.name,
+      candidate.user.username,
+      profileUrl,
+      candidate.kind === "founder"
+        ? "X user search found a founder-like profile linked to the project."
+        : "X user search found an official-looking project profile.",
+    );
 
     const profileReceipt = addDiscoveredReceipt(
       receipts,
@@ -1560,7 +1620,10 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
     );
 
     if (profileReceipt) {
-      profileReceipt.reason = foundCandidates[foundCandidates.length - 1].reason;
+      profileReceipt.reason =
+        candidate.kind === "founder"
+          ? "X user search found a founder-like profile linked to the project."
+          : "X user search found an official-looking project profile.";
     }
 
     if (isTrusted) {
@@ -1654,13 +1717,6 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
         };
         receipt.xPostId = tweet.id;
         foundReceipts.push(receipt);
-      } else if (foundCandidates.length < 3) {
-        foundCandidates.push({
-          name: author.name,
-          username: author.username,
-          url: `https://x.com/${author.username}`,
-          reason: "Mentioned in an X result, but founder identity is not verified from profile text.",
-        });
       }
     }
   }
@@ -2027,7 +2083,7 @@ const server = http.createServer(async (request, response) => {
       const claim = String(body.claim || "").trim();
       const category = String(body.category || "airdrop_rumor");
       const project = String(body.project || "auto");
-      const research = scoutClaim(claim, category, project);
+      const research = await scoutClaim(claim, category, project, getRequestBaseUrl(request));
 
       sendJson(response, 200, { ok: true, claim, category, project, research });
     } catch (error) {
