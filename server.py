@@ -990,9 +990,6 @@ def choose_genlayer_receipt(receipts):
     for receipt in receipts:
         if can_genlayer_fetch_receipt(receipt):
             return receipt
-    for receipt in receipts:
-        if receipt and not receipt.get("discoveryOnly") and receipt["type"] not in ["founder_x", "x", "search"]:
-            return receipt
     return None
 
 
@@ -1001,6 +998,9 @@ def make_scout_status(project, category, best_receipt, genlayer_receipt):
         return f"Found {project['name']}, but no official receipt is registered yet."
 
     if not genlayer_receipt or is_same_receipt(best_receipt, genlayer_receipt):
+        if not genlayer_receipt and best_receipt.get("discoveryOnly"):
+            return f"Prepared {best_receipt['title']} as a discovery route. Verify an official receipt before GenLayer judges."
+
         return f"Picked {best_receipt['title']} as the strongest {format_claim_type(category).lower()} receipt."
 
     return f"Picked {best_receipt['title']} as the strongest signal. GenLayer will fetch {genlayer_receipt['title']}."

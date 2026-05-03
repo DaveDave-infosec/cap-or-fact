@@ -938,18 +938,7 @@ function canGenLayerFetchReceipt(receipt) {
 }
 
 function chooseGenLayerReceipt(receipts) {
-  return (
-    receipts.find((receipt) => canGenLayerFetchReceipt(receipt)) ||
-    receipts.find(
-      (receipt) =>
-        receipt &&
-        !receipt.discoveryOnly &&
-        receipt.type !== "founder_x" &&
-        receipt.type !== "x" &&
-        receipt.type !== "search",
-    ) ||
-    null
-  );
+  return receipts.find((receipt) => canGenLayerFetchReceipt(receipt)) || null;
 }
 
 function makeScoutStatus(project, category, bestReceipt, genlayerReceipt) {
@@ -958,6 +947,10 @@ function makeScoutStatus(project, category, bestReceipt, genlayerReceipt) {
   }
 
   if (!genlayerReceipt || isSameReceipt(bestReceipt, genlayerReceipt)) {
+    if (!genlayerReceipt && bestReceipt.discoveryOnly) {
+      return `Prepared ${bestReceipt.title} as a discovery route. Verify an official receipt before GenLayer judges.`;
+    }
+
     return `Picked ${bestReceipt.title} as the strongest ${formatClaimType(category).toLowerCase()} receipt.`;
   }
 

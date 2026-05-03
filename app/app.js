@@ -856,10 +856,32 @@ const maxClaimHistory = 20;
 const recentCasesStorageKey = "cap-or-fact-recent-cases";
 const claimHistoryStorageKey = "cap-or-fact-claim-history";
 
+function normalizeStoredCaseRow(row) {
+  if (!row || typeof row !== "object") {
+    return row;
+  }
+
+  if (row.className === "is-scouting" && typeof row.source === "string") {
+    row.source = row.source.replace(/^GenLayer receipt:/, "Discovery route:");
+  }
+
+  if (
+    row.className === "is-scouting" &&
+    typeof row.nextStep === "string" &&
+    row.nextStep.startsWith("Live search needs")
+  ) {
+    row.nextStep = "Discovery route prepared. Verify an official receipt before GenLayer judges.";
+  }
+
+  return row;
+}
+
 function loadRecentCases() {
   try {
     const savedCases = JSON.parse(window.localStorage.getItem(recentCasesStorageKey) || "[]");
-    recentCases = Array.isArray(savedCases) ? savedCases.slice(0, maxRecentCases) : [];
+    recentCases = Array.isArray(savedCases)
+      ? savedCases.slice(0, maxRecentCases).map(normalizeStoredCaseRow)
+      : [];
   } catch {
     recentCases = [];
   }
@@ -1242,22 +1264,11 @@ function canGenLayerFetchReceipt(receipt) {
 }
 
 function chooseGenLayerReceipt(receipts) {
-  return (
-    receipts.find((receipt) => canGenLayerFetchReceipt(receipt)) ||
-    receipts.find(
-      (receipt) =>
-        receipt &&
-        !receipt.discoveryOnly &&
-        receipt.type !== "founder_x" &&
-        receipt.type !== "x" &&
-        receipt.type !== "search",
-    ) ||
-    null
-  );
+  return receipts.find((receipt) => canGenLayerFetchReceipt(receipt)) || null;
 }
 
 function getGenLayerSourceUrls(research) {
-  if (research.genlayerSourceUrls) {
+  if (Array.isArray(research.genlayerSourceUrls)) {
     return research.genlayerSourceUrls;
   }
 
@@ -1265,7 +1276,7 @@ function getGenLayerSourceUrls(research) {
     return [research.genlayerReceipt.url];
   }
 
-  return research.sourceUrls || [];
+  return [];
 }
 
 function normalizeResearch(research, category) {
@@ -1292,6 +1303,10 @@ function makeScoutStatus(project, category, bestReceipt, genlayerReceipt) {
   }
 
   if (!genlayerReceipt || isSameReceipt(bestReceipt, genlayerReceipt)) {
+    if (!genlayerReceipt && bestReceipt.discoveryOnly) {
+      return `Prepared ${bestReceipt.title} as a discovery route. Verify an official receipt before GenLayer judges.`;
+    }
+
     return `Picked ${bestReceipt.title} as the strongest ${formatClaimType(category).toLowerCase()} receipt.`;
   }
 
@@ -1430,11 +1445,11 @@ function readForm() {
 
 function previewCase(data) {
   const evidenceCount = data.research.receipts.length;
-  const hasGenLayerReceipt = data.source_urls.length > 0;
+  const hasGenLayerReceipt = data.source_urls.length > 0 && Boolean(data.research.genlayerReceipt);
   const hasClaim = data.claim.length > 0;
   const lowerClaim = data.claim.toLowerCase();
   const bestReceipt = data.research.bestReceipt || data.research.receipts[0];
-  const genlayerReceipt = data.research.genlayerReceipt || bestReceipt;
+  const genlayerReceipt = data.research.genlayerReceipt;
   const isStudioTestedCitrea =
     (data.research.projectId === "citrea" || lowerClaim.includes("citrea")) &&
     (lowerClaim.includes("tge") || lowerClaim.includes("token"));
@@ -1463,7 +1478,7 @@ function previewCase(data) {
       state: "needs-receipts",
       readiness: "needs live search",
       summary:
-        "No official receipt is selected yet. Live search needs to find a docs, blog, or official account source.",
+        "Discovery routes are prepared, but no official GenLayer-readable receipt is selected yet.",
     };
   }
 
@@ -1540,7 +1555,7 @@ function renderReceipts(research, category) {
 
     if (isSameReceipt(receipt, research.bestReceipt)) {
       const tag = document.createElement("span");
-      tag.textContent = "Primary signal";
+      tag.textContent = receipt.discoveryOnly ? "Discovery route" : "Primary signal";
       tags.append(tag);
     }
 
@@ -1620,7 +1635,7 @@ function renderStudioRun(data, preview) {
 
 function makeCaseRow(data, preview) {
   const bestReceipt = data.research.bestReceipt || data.research.receipts[0];
-  const genlayerReceipt = data.research.genlayerReceipt || bestReceipt;
+  const genlayerReceipt = data.research.genlayerReceipt;
   const sourceCount = data.research.receipts.length;
 
   const statusLabel =
@@ -1631,10 +1646,19 @@ function makeCaseRow(data, preview) {
         : preview.state === "needs-receipts"
           ? "Needs live search"
           : "Draft";
-  const sourceLabel = genlayerReceipt
-    ? `GenLayer receipt: ${genlayerReceipt.title}`
-    : "No official receipt selected yet";
-  const evidenceLabel = `Evidence scout found ${sourceCount} official source${sourceCount === 1 ? "" : "s"}.`;
+  const sourceLabel =
+    bestReceipt && genlayerReceipt && !isSameReceipt(bestReceipt, genlayerReceipt)
+      ? `Primary signal: ${bestReceipt.title}. GenLayer receipt: ${genlayerReceipt.title}`
+      : genlayerReceipt
+        ? `GenLayer receipt: ${genlayerReceipt.title}`
+        : bestReceipt
+          ? `Discovery route: ${bestReceipt.title}`
+          : "No official receipt selected yet";
+  const evidenceLabel = genlayerReceipt
+    ? `Evidence scout found ${sourceCount} official source${sourceCount === 1 ? "" : "s"}.`
+    : sourceCount > 0
+      ? `Discovery scout prepared ${sourceCount} route${sourceCount === 1 ? "" : "s"}.`
+      : "No discovery route is selected yet.";
 
   return {
     id: `${data.research.projectId || data.project}|${data.claim.toLowerCase()}|${data.category}`,
@@ -1649,7 +1673,7 @@ function makeCaseRow(data, preview) {
         : preview.state === "ready"
           ? `${evidenceLabel} Ready for GenLayer judgment.`
           : preview.state === "needs-receipts"
-            ? "Live search needs to find an official docs, blog, or account receipt."
+            ? `${evidenceLabel} Verify an official receipt before GenLayer judges.`
             : "Write a claim and scout receipts.",
     className:
       preview.state === "tested-cap"
@@ -1742,10 +1766,14 @@ function renderPreview() {
   document.querySelector("#case-confidence").textContent = stagePreview.readiness;
   document.querySelector("#receipt-summary").textContent = stagePreview.summary;
   const bestReceipt = stageData.research.bestReceipt || stageData.research.receipts[0];
-  const genlayerReceipt = stageData.research.genlayerReceipt || bestReceipt;
-  document.querySelector("#source-label").textContent =
-    stageData.source_urls.length > 0 ? "GenLayer receipt" : "Evidence";
-  document.querySelector("#source-count").textContent = genlayerReceipt ? "Selected" : "Pending";
+  const genlayerReceipt = stageData.research.genlayerReceipt;
+  const hasGenLayerReceipt = stageData.source_urls.length > 0 && Boolean(genlayerReceipt);
+  document.querySelector("#source-label").textContent = hasGenLayerReceipt
+    ? "GenLayer receipt"
+    : bestReceipt
+      ? "Discovery route"
+      : "Evidence";
+  document.querySelector("#source-count").textContent = hasGenLayerReceipt ? "Selected" : "Pending";
   document.querySelector("#share-status").textContent =
     stagePreview.state === "tested-cap"
       ? "GenLayer verified"
@@ -1947,14 +1975,17 @@ function buildShareText() {
   const data = displayedCase ? displayedCase.data : currentData;
   const preview = displayedCase ? displayedCase.preview : previewCase(currentData);
   const bestReceipt = data.research.bestReceipt || data.research.receipts[0];
-  const genlayerReceipt = data.research.genlayerReceipt || bestReceipt;
+  const genlayerReceipt = data.research.genlayerReceipt;
   const sourceLine =
     bestReceipt && genlayerReceipt && !isSameReceipt(bestReceipt, genlayerReceipt)
       ? `Primary signal: ${bestReceipt.title} (${bestReceipt.url})
 GenLayer receipt: ${genlayerReceipt.title} (${genlayerReceipt.url})`
       : genlayerReceipt
         ? `GenLayer receipt: ${genlayerReceipt.title} (${genlayerReceipt.url})`
-        : "GenLayer receipt: pending live search";
+        : bestReceipt
+          ? `Discovery route: ${bestReceipt.title} (${bestReceipt.url})
+GenLayer receipt: pending official source`
+          : "GenLayer receipt: pending official source";
   const proofLine =
     preview.state === "tested-cap"
       ? "\nProof: 0x09845790DE3cF5C5F048C1a9a18B0317526A12f0"
@@ -1981,7 +2012,7 @@ function buildStudioStepsText() {
   const data = readForm();
   const contractInputs = getContractInputs(data);
   const bestReceipt = data.research.bestReceipt || data.research.receipts[0];
-  const genlayerReceipt = data.research.genlayerReceipt || bestReceipt;
+  const genlayerReceipt = data.research.genlayerReceipt;
   const primaryLine =
     bestReceipt && genlayerReceipt && !isSameReceipt(bestReceipt, genlayerReceipt)
       ? `Primary signal:
@@ -1992,7 +2023,20 @@ GenLayer-readable receipt:
 ${genlayerReceipt.title}
 ${genlayerReceipt.url}
 `
-      : "";
+      : bestReceipt && !genlayerReceipt
+        ? `Discovery route:
+${bestReceipt.title}
+${bestReceipt.url}
+
+GenLayer-readable receipt:
+pending official URL
+`
+        : genlayerReceipt
+          ? `GenLayer-readable receipt:
+${genlayerReceipt.title}
+${genlayerReceipt.url}
+`
+          : "";
 
   return `Cap or Fact Studio Run
 
