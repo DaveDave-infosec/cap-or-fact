@@ -95,8 +95,56 @@ select {
   line-height: 1.45;
 }
 
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.brand-mark {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border: 1px solid rgba(110, 168, 254, 0.34);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(50, 213, 131, 0.18), transparent 46%),
+    linear-gradient(315deg, rgba(255, 91, 110, 0.18), transparent 48%),
+    #0d1115;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.28);
+}
+
+.brand-mark::after {
+  content: "";
+  position: absolute;
+  inset: 6px 21px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.22);
+  transform: rotate(18deg);
+}
+
+.brand-mark span {
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 950;
+}
+
+.brand-mark span:first-child {
+  color: var(--fact);
+}
+
+.brand-mark span:last-child {
+  color: var(--cap);
+}
+
 .eyebrow {
-  margin: 0 0 8px;
+  margin: 0;
   color: var(--blue);
   font-size: 0.78rem;
   font-weight: 800;
