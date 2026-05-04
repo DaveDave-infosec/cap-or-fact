@@ -9,6 +9,8 @@ const APP_DIR = path.join(__dirname, "app");
 const X_BEARER_TOKEN = process.env.X_BEARER_TOKEN || process.env.TWITTER_BEARER_TOKEN || "";
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || "").replace(/\/$/, "");
 const X_API_BASE_URL = (process.env.X_API_BASE_URL || "https://api.x.com").replace(/\/$/, "");
+const GOOGLE_SEARCH_API_KEY = process.env.GOOGLE_SEARCH_API_KEY || "";
+const GOOGLE_SEARCH_CX = process.env.GOOGLE_SEARCH_CX || "";
 
 const projectRegistry = [
   {
@@ -1220,7 +1222,7 @@ function fetchText(url, timeoutMs = 5000) {
   });
 }
 
-async function searchWeb(query, limit = 4) {
+async function searchDuckDuckGo(query, limit = 4) {
   const searchUrl = `https://duckduckgo.com/html/?${new URLSearchParams({ q: query }).toString()}`;
   const html = await fetchText(searchUrl);
   const results = [];
@@ -1242,6 +1244,16 @@ async function searchWeb(query, limit = 4) {
   }
 
   return results;
+}
+
+async function searchWeb(query, limit = 4) {
+  const googleResults = await searchGoogleWeb(query, limit);
+
+  if (googleResults.length > 0) {
+    return googleResults;
+  }
+
+  return searchDuckDuckGo(query, limit);
 }
 
 function fetchJson(url, headers = {}, timeoutMs = 8000) {
@@ -1289,6 +1301,33 @@ function fetchJson(url, headers = {}, timeoutMs = 8000) {
     });
     request.on("error", reject);
   });
+}
+
+async function searchGoogleWeb(query, limit = 4) {
+  if (!GOOGLE_SEARCH_API_KEY || !GOOGLE_SEARCH_CX) {
+    return [];
+  }
+
+  try {
+    const requestUrl = new URL("https://www.googleapis.com/customsearch/v1");
+    requestUrl.searchParams.set("key", GOOGLE_SEARCH_API_KEY);
+    requestUrl.searchParams.set("cx", GOOGLE_SEARCH_CX);
+    requestUrl.searchParams.set("q", query);
+    requestUrl.searchParams.set("num", String(Math.min(Math.max(limit, 1), 10)));
+    const payload = await fetchJson(requestUrl, {}, 8000);
+    const items = Array.isArray(payload.items) ? payload.items : [];
+
+    return items
+      .map((item) => ({
+        title: item.title || "",
+        url: item.link || "",
+        snippet: item.snippet || "",
+      }))
+      .filter((item) => item.title && item.url)
+      .slice(0, limit);
+  } catch {
+    return [];
+  }
 }
 
 function describeXApiError(error) {

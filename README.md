@@ -129,7 +129,7 @@ Likely project: Noya. Verifying official sources before GenLayer can judge this 
 
 CryptoRank is prioritized for early-stage and pre-token projects because CoinGecko and CoinMarketCap usually focus more on tokenized projects.
 
-Founder-related claims trigger a stronger live discovery path. The scout searches for founder/team/X sources first, then falls back to official project X, website, blog, docs, and GitHub. Known founder accounts can still be cached for faster demos, but the production path does not depend on manually registering every founder.
+Founder-related claims trigger a stronger live discovery path. The scout searches the web for likely founder names, checks founder/team/X sources, then falls back to official project X, website, blog, docs, and GitHub. Known founder accounts can still be cached for faster demos, but the production path does not depend on manually registering every founder.
 
 ### Automated X Founder Scout
 
@@ -138,22 +138,25 @@ Founder claims use an X-first crawler when an X API bearer token is configured o
 The automated path is:
 
 1. detect the likely project.
-2. use known official X handles when available.
-3. search recent X posts for founder, cofounder, CEO, official, and claim keywords.
-4. verify whether the author profile looks founder-linked or official.
-5. create a GenLayer-readable receipt gateway URL for the X post.
-6. keep GenLayer waiting if only search routes are available.
+2. use Google Custom Search when configured to find likely founder names from web snippets.
+3. use known official X handles when available.
+4. search X profiles for founder names, cofounder, CEO, official, and project keywords.
+5. search recent X posts from verified or project-linked founder/official candidates.
+6. create a GenLayer-readable receipt gateway URL for the X post.
+7. keep GenLayer waiting if only search routes are available.
 
 Set these Render environment variables to enable the crawler:
 
 ```text
 X_BEARER_TOKEN=<your X API bearer token>
 PUBLIC_BASE_URL=https://your-render-url
+GOOGLE_SEARCH_API_KEY=<optional Google Custom Search API key>
+GOOGLE_SEARCH_CX=<optional Google Programmable Search Engine id>
 ```
 
 `X_API_BASE_URL` can be set if your X API provider uses a different compatible base URL.
 
-If `X_BEARER_TOKEN` is missing, the app falls back to safe X discovery routes and clearly marks them as candidates instead of evidence.
+If `GOOGLE_SEARCH_API_KEY` or `GOOGLE_SEARCH_CX` is missing, the app falls back to its basic web search route. If `X_BEARER_TOKEN` is missing, the app falls back to safe X discovery routes and clearly marks them as candidates instead of evidence.
 
 Project selection is separate from Claim Type. That means a user can choose:
 
