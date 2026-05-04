@@ -13,7 +13,7 @@ const GOOGLE_SEARCH_API_KEY = process.env.GOOGLE_SEARCH_API_KEY || "";
 const GOOGLE_SEARCH_CX = process.env.GOOGLE_SEARCH_CX || "";
 const XAI_API_KEY = process.env.XAI_API_KEY || "";
 const XAI_API_BASE_URL = (process.env.XAI_API_BASE_URL || "https://api.x.ai/v1").replace(/\/$/, "");
-const XAI_MODEL = process.env.XAI_MODEL || "grok-4.3";
+const XAI_MODEL = process.env.XAI_MODEL || "grok-4.20";
 
 const projectRegistry = [
   {
