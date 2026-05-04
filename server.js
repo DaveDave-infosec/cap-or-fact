@@ -1013,6 +1013,8 @@ function makeFounderScout(research, category) {
   const officialX = receipts.find((receipt) => receipt.type === "x");
   const claimReceipt = research.genlayerReceipt || null;
   const candidates = ((research.xScout && research.xScout.candidates) || []).slice(0, 3);
+  const founderNameLeads = ((research.xScout && research.xScout.founderNameLeads) || []).slice(0, 3);
+  const founderLeadNames = founderNameLeads.map((lead) => lead.name).filter(Boolean);
   const hasKnownFounder = Boolean((founderReceipt && !founderReceipt.discoveryOnly) || founderPost);
   const candidateRoute = founderReceipt || founderPost || founderSearch || officialX || null;
 
@@ -1030,7 +1032,9 @@ function makeFounderScout(research, category) {
     summary = "A GenLayer-readable receipt is selected. GenLayer can judge after the contract fetches it.";
   } else if (research.xScout && research.xScout.enabled) {
     mode = "strict check";
-    summary = "No verified founder receipt found yet. Founder claims require a confirmed founder profile plus a specific post or reply.";
+    summary = founderLeadNames.length
+      ? "Google found founder-name leads. X still needs to verify the matching profile and exact claim post."
+      : "No verified founder receipt found yet. Founder claims require a confirmed founder profile plus a specific post or reply.";
   } else if (hasKnownFounder) {
     mode = "founder mapped";
     summary = "Founder account is mapped. Find the exact post, reply, or quote before GenLayer judges.";
@@ -1054,11 +1058,17 @@ function makeFounderScout(research, category) {
       },
       {
         label: "Founder candidate",
-        value: candidateRoute ? candidateRoute.title : "Founder X account not selected yet",
+        value: candidateRoute
+          ? candidateRoute.title
+          : founderLeadNames.length
+            ? `Google found: ${founderLeadNames.join(", ")}`
+            : "Founder X account not selected yet",
         detail: hasKnownFounder
           ? "Known founder mapping found. A specific post or reply is still needed for judgment."
+          : founderLeadNames.length
+            ? "Next step is matching the founder name to a verified X profile and a specific post or reply."
           : "X-first discovery should find the founder account before any claim judgment.",
-        status: hasKnownFounder ? "ready" : candidateRoute ? "candidate" : "pending",
+        status: hasKnownFounder ? "ready" : candidateRoute || founderLeadNames.length ? "candidate" : "pending",
       },
       {
         label: "Identity verification",
@@ -1418,10 +1428,20 @@ function claimKeywords(claim) {
     "that",
     "this",
     "from",
+    "about",
+    "anything",
+    "something",
     "official",
     "founder",
     "cofounder",
     "co-founder",
+    "say",
+    "says",
+    "said",
+    "hint",
+    "hinted",
+    "quote",
+    "quoted",
   ]);
 
   return String(claim || "")
@@ -1536,10 +1556,15 @@ async function discoverFounderNameLeads(projectName) {
   }
 
   const queries = [
+    `"${cleanProjectName}" founder`,
     `${cleanProjectName} founders`,
     `${cleanProjectName} founder`,
     `${cleanProjectName} cofounder`,
+    `${cleanProjectName} CEO`,
     `${cleanProjectName} team founder`,
+    `who founded ${cleanProjectName} crypto`,
+    `${cleanProjectName} founder X`,
+    `${cleanProjectName} founder twitter`,
   ];
   const leads = new Map();
 
@@ -1734,6 +1759,7 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
     return {
       enabled: false,
       status: "Automated X crawling is waiting for data-provider access.",
+      founderNameLeads: [],
       candidates: [],
       receipts: [],
     };
@@ -1861,6 +1887,7 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
       return {
         enabled: true,
         status: describeXApiError(error),
+        founderNameLeads,
         candidates: foundCandidates,
         receipts: foundReceipts,
       };
@@ -1923,7 +1950,10 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
       ? `X crawler found ${foundReceipts.length} candidate receipt${foundReceipts.length === 1 ? "" : "s"}.`
       : foundCandidates.length
         ? `Founder profile candidates found, but no exact post or reply receipt yet.`
+        : founderNameLeads.length
+          ? `Google founder search found ${founderNameLeads.map((lead) => lead.name).join(", ")}, but X did not verify a matching post receipt yet.`
         : "No verified founder receipt found yet. Founder claims require a confirmed founder profile plus a specific post or reply.",
+    founderNameLeads,
     candidates: foundCandidates,
     receipts: foundReceipts,
   };
