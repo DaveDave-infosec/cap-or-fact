@@ -149,14 +149,18 @@ Set these Render environment variables to enable the crawler:
 
 ```text
 PUBLIC_BASE_URL=https://your-render-url
+XAI_API_KEY=<optional xAI API key for Grok Scout>
+XAI_MODEL=grok-4.3
 X_BEARER_TOKEN=<your X API bearer token>
 GOOGLE_SEARCH_API_KEY=<optional Google Custom Search API key>
 GOOGLE_SEARCH_CX=<optional Google Programmable Search Engine id>
 ```
 
-`X_API_BASE_URL` can be set if your X API provider uses a different compatible base URL.
+`X_API_BASE_URL` can be set if your X API provider uses a different compatible base URL. `XAI_API_BASE_URL` defaults to `https://api.x.ai/v1`.
 
 If `GOOGLE_SEARCH_API_KEY` or `GOOGLE_SEARCH_CX` is missing, the app falls back to its basic web search route. If `X_BEARER_TOKEN` is missing, the app falls back to safe X discovery routes and clearly marks them as candidates instead of evidence.
+
+If `XAI_API_KEY` is configured, Grok Scout runs first for founder/X-heavy claims. Grok searches X for exact posts, replies, quotes, founder handles, and official handles. The app still treats Grok as a receipt hunter, not the judge: GenLayer only judges after the app has a real fetchable receipt URL.
 
 Important: Google Programmable Search should be configured to search the entire web. If it is restricted to a short list of sites, founder discovery will look weaker than normal Google Search.
 

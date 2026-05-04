@@ -11,6 +11,9 @@ const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTER
 const X_API_BASE_URL = (process.env.X_API_BASE_URL || "https://api.x.com").replace(/\/$/, "");
 const GOOGLE_SEARCH_API_KEY = process.env.GOOGLE_SEARCH_API_KEY || "";
 const GOOGLE_SEARCH_CX = process.env.GOOGLE_SEARCH_CX || "";
+const XAI_API_KEY = process.env.XAI_API_KEY || "";
+const XAI_API_BASE_URL = (process.env.XAI_API_BASE_URL || "https://api.x.ai/v1").replace(/\/$/, "");
+const XAI_MODEL = process.env.XAI_MODEL || "grok-4.3";
 
 const projectRegistry = [
   {
@@ -1340,6 +1343,60 @@ function fetchJson(url, headers = {}, timeoutMs = 8000) {
   });
 }
 
+function postJson(url, payload, headers = {}, timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    const requestUrl = url instanceof URL ? url : new URL(url);
+    const body = JSON.stringify(payload);
+    const request = https.request(
+      requestUrl,
+      {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          "content-length": Buffer.byteLength(body),
+          "user-agent": "CapOrFactSourceScout/1.0",
+          ...headers,
+        },
+        timeout: timeoutMs,
+      },
+      (response) => {
+        let responseBody = "";
+
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          if (responseBody.length < 1200000) {
+            responseBody += chunk;
+          }
+        });
+        response.on("end", () => {
+          if (response.statusCode < 200 || response.statusCode >= 300) {
+            const error = new Error(`Request failed with status ${response.statusCode}`);
+            error.statusCode = response.statusCode;
+            error.responseBody = responseBody.slice(0, 1200);
+            reject(error);
+            return;
+          }
+
+          try {
+            resolve(JSON.parse(responseBody || "{}"));
+          } catch (error) {
+            reject(error);
+          }
+        });
+      },
+    );
+
+    request.on("timeout", () => {
+      request.destroy();
+      reject(new Error("Request timed out"));
+    });
+    request.on("error", reject);
+    request.write(body);
+    request.end();
+  });
+}
+
 async function searchGoogleWeb(query, limit = 4) {
   if (!GOOGLE_SEARCH_API_KEY || !GOOGLE_SEARCH_CX) {
     return [];
@@ -1643,6 +1700,258 @@ function getFounderLeadMatch(user, founderNameLeads = []) {
   }) || null;
 }
 
+function getXStatusId(url) {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.replace(/^www\./, "").toLowerCase();
+
+    if (hostname !== "x.com" && hostname !== "twitter.com") {
+      return "";
+    }
+
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    const statusIndex = parts.findIndex((part) => part === "status" || part === "statuses");
+
+    return statusIndex >= 0 ? parts[statusIndex + 1] || "" : "";
+  } catch {
+    return "";
+  }
+}
+
+function extractJsonObject(text) {
+  const rawText = String(text || "").trim();
+
+  if (!rawText) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(rawText);
+  } catch {
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+
+    if (!jsonMatch) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(jsonMatch[0]);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function collectStringsDeep(value, strings = []) {
+  if (typeof value === "string") {
+    strings.push(value);
+    return strings;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectStringsDeep(item, strings));
+    return strings;
+  }
+
+  if (value && typeof value === "object") {
+    Object.values(value).forEach((item) => collectStringsDeep(item, strings));
+  }
+
+  return strings;
+}
+
+function extractXUrlsFromText(text) {
+  const urls = new Set();
+  const pattern = /https?:\/\/(?:www\.)?(?:x|twitter)\.com\/[^\s"')\]}<]+/gi;
+  let match;
+
+  while ((match = pattern.exec(String(text || "")))) {
+    urls.add(match[0].replace(/[.,;:!?]+$/, ""));
+  }
+
+  return [...urls];
+}
+
+function normalizeHandle(handle) {
+  return String(handle || "")
+    .replace(/^@/, "")
+    .replace(/[^a-zA-Z0-9_]/g, "")
+    .trim();
+}
+
+function xaiResponseText(payload) {
+  if (typeof payload.output_text === "string") {
+    return payload.output_text;
+  }
+
+  return collectStringsDeep(payload.output || [])
+    .filter((text) => text.trim().length > 0)
+    .join("\n");
+}
+
+function xaiCitationUrls(payload, outputText) {
+  const urls = new Set();
+
+  if (Array.isArray(payload.citations)) {
+    payload.citations.forEach((citation) => {
+      if (typeof citation === "string") {
+        urls.add(citation);
+      } else if (citation && citation.url) {
+        urls.add(citation.url);
+      }
+    });
+  }
+
+  collectStringsDeep(payload).forEach((text) => {
+    extractXUrlsFromText(text).forEach((url) => urls.add(url));
+  });
+  extractXUrlsFromText(outputText).forEach((url) => urls.add(url));
+
+  return [...urls];
+}
+
+async function scoutGrokXReceipts(claim, projectName, receipts, seenUrls, publicBaseUrl = PUBLIC_BASE_URL) {
+  if (!XAI_API_KEY) {
+    return {
+      enabled: false,
+      status: "Grok Scout is waiting for an xAI API key.",
+      candidates: [],
+      receipts: [],
+    };
+  }
+
+  const prompt = `
+You are Grok Scout for Cap or Fact, a crypto claim receipt hunter.
+
+Find X sources for this claim. Prefer exact X posts, replies, or quotes from verified founder, official project, or official team accounts.
+
+Project:
+${projectName}
+
+Claim:
+${claim}
+
+Return JSON only with exactly these keys:
+{
+  "source_urls": ["real X post/reply/status URLs that directly relate to the claim"],
+  "founder_handles": ["likely founder X handles, without @"],
+  "official_handles": ["official project/team X handles, without @"],
+  "evidence_notes": ["short notes on why each URL matters"]
+}
+
+Rules:
+- Use X search.
+- Do not invent URLs or handles.
+- Do not return Google/search-page URLs.
+- If no exact post or reply is found, keep source_urls empty and return likely handles only.
+- It is okay to return UNCLEAR-style evidence; the contract will judge later.
+`;
+
+  try {
+    const requestUrl = `${XAI_API_BASE_URL}/responses`;
+    const payload = await postJson(
+      requestUrl,
+      {
+        model: XAI_MODEL,
+        input: prompt,
+        tools: [{ type: "web_search" }, { type: "x_search" }],
+      },
+      {
+        authorization: `Bearer ${XAI_API_KEY}`,
+      },
+      35000,
+    );
+    const outputText = xaiResponseText(payload);
+    const parsed = extractJsonObject(outputText) || {};
+    const parsedUrls = Array.isArray(parsed.source_urls) ? parsed.source_urls : [];
+    const citationUrls = xaiCitationUrls(payload, outputText);
+    const allUrls = [...new Set([...parsedUrls, ...citationUrls])];
+    const founderHandles = Array.isArray(parsed.founder_handles) ? parsed.founder_handles : [];
+    const officialHandles = Array.isArray(parsed.official_handles) ? parsed.official_handles : [];
+    const candidates = [];
+    const foundReceipts = [];
+
+    [...founderHandles, ...officialHandles].forEach((handle) => {
+      const cleanHandle = normalizeHandle(handle);
+
+      if (!cleanHandle) {
+        return;
+      }
+
+      candidates.push({
+        name: cleanHandle,
+        username: cleanHandle,
+        url: `https://x.com/${cleanHandle}`,
+        reason: "Grok X Search identified this account as a likely founder or official source.",
+      });
+    });
+
+    allUrls.forEach((url) => {
+      const handle = extractXHandle(url);
+      const statusId = getXStatusId(url);
+
+      if (!handle) {
+        return;
+      }
+
+      if (!statusId) {
+        candidates.push({
+          name: handle,
+          username: handle,
+          url: `https://x.com/${handle}`,
+          reason: "Grok X Search surfaced this profile as a source candidate.",
+        });
+        addDiscoveredReceipt(
+          receipts,
+          seenUrls,
+          `${handle} X profile`,
+          `https://x.com/${handle}`,
+          "founder_x",
+          116,
+          true,
+        );
+        return;
+      }
+
+      const receipt = addDiscoveredReceipt(
+        receipts,
+        seenUrls,
+        `${handle} X post`,
+        url,
+        "founder_post",
+        150,
+      );
+
+      if (!receipt) {
+        return;
+      }
+
+      receipt.genlayerUrl = makeXReceiptGatewayUrl(statusId, publicBaseUrl) || url;
+      receipt.reason = "Grok X Search cited this exact X post or reply as a claim receipt.";
+      receipt.xPostId = statusId;
+      foundReceipts.push(receipt);
+    });
+
+    return {
+      enabled: true,
+      status: foundReceipts.length
+        ? `Grok Scout found ${foundReceipts.length} X receipt${foundReceipts.length === 1 ? "" : "s"}.`
+        : candidates.length
+          ? "Grok Scout found X account candidates, but no exact post receipt yet."
+          : "Grok Scout ran but did not return a usable X receipt.",
+      candidates,
+      receipts: foundReceipts,
+    };
+  } catch (error) {
+    return {
+      enabled: true,
+      status: `Grok Scout could not complete: ${error.message}`,
+      candidates: [],
+      receipts: [],
+    };
+  }
+}
+
 function scoreXUserCandidate(user, projectName, founderNameLeads = []) {
   let score = 0;
   const haystack = `${user.name || ""} ${user.username || ""} ${user.description || ""}`.toLowerCase();
@@ -1782,24 +2091,27 @@ async function fetchXPostReceipt(tweetId) {
 }
 
 async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, publicBaseUrl = PUBLIC_BASE_URL) {
+  const officialHandle = getOfficialXHandle(projectName);
+  const founderNameLeads = await discoverFounderNameLeads(projectName);
+  const grokScout = await scoutGrokXReceipts(claim, projectName, receipts, seenUrls, publicBaseUrl);
+
   if (!X_BEARER_TOKEN) {
     return {
-      enabled: false,
-      status: "Automated X crawling is waiting for data-provider access.",
-      founderNameLeads: [],
-      candidates: [],
-      receipts: [],
+      enabled: Boolean(grokScout.enabled),
+      status: grokScout.enabled ? grokScout.status : "Automated X crawling is waiting for data-provider access.",
+      founderNameLeads,
+      candidates: grokScout.candidates || [],
+      receipts: grokScout.receipts || [],
+      grokScout,
     };
   }
 
-  const officialHandle = getOfficialXHandle(projectName);
   const keywords = claimKeywords(claim).filter((word) => word !== projectName.toLowerCase());
   const keywordQuery = keywords.length ? keywords.slice(0, 5).join(" OR ") : "hint OR airdrop OR snapshot OR tge";
   const foundCandidates = [];
-  const foundReceipts = [];
+  const foundReceipts = [...(grokScout.receipts || [])];
   const trustedHandles = new Map();
   const candidateHandles = new Set();
-  const founderNameLeads = await discoverFounderNameLeads(projectName);
 
   function addProfileCandidate(name, username, url, reason) {
     const normalizedUsername = String(username || "").toLowerCase();
@@ -1811,6 +2123,10 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
     candidateHandles.add(normalizedUsername);
     foundCandidates.push({ name, username, url, reason });
   }
+
+  (grokScout.candidates || []).forEach((candidate) => {
+    addProfileCandidate(candidate.name, candidate.username, candidate.url, candidate.reason);
+  });
 
   receipts.forEach((receipt) => {
     const handle = extractXHandle(receipt.url);
@@ -1917,6 +2233,7 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
         founderNameLeads,
         candidates: foundCandidates,
         receipts: foundReceipts,
+        grokScout,
       };
     }
 
@@ -1983,6 +2300,7 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
     founderNameLeads,
     candidates: foundCandidates,
     receipts: foundReceipts,
+    grokScout,
   };
 }
 

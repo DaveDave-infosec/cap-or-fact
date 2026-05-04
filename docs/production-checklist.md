@@ -18,6 +18,8 @@ Set these environment variables in Render:
 
 ```text
 PUBLIC_BASE_URL=https://your-render-url.onrender.com
+XAI_API_KEY=<optional xAI API key for Grok Scout>
+XAI_MODEL=grok-4.3
 X_BEARER_TOKEN=<optional X API bearer token>
 GOOGLE_SEARCH_API_KEY=<optional Google Custom Search API key>
 GOOGLE_SEARCH_CX=<optional Google Programmable Search Engine id>
@@ -45,13 +47,15 @@ Google Search is used for source discovery. GenLayer should still judge from rea
 
 Founder statements are intentionally strict.
 
-The app may discover project/founder candidates from Google or X, but GenLayer should only judge after there is a real receipt URL, such as:
+The app may discover project/founder candidates from Grok, Google, or X, but GenLayer should only judge after there is a real receipt URL, such as:
 
 - a founder X post or reply fetched through the receipt gateway.
 - an official project X post.
 - an official blog, docs, website, or team page that directly supports the claim.
 
 If Founder Scout shows `STRICT CHECK`, it means the app did not find a verified founder profile plus exact post/reply receipt yet. This is not a fatal app error; it is the guardrail that prevents random X/search results from becoming proof.
+
+Grok Scout improves source hunting for X-heavy claims, but it should remain a scout. Do not treat a Grok-written answer as proof unless it returns real source URLs.
 
 ## Best Demo
 
