@@ -359,6 +359,10 @@ label {
   display: none;
 }
 
+#quality-list li.is-tip {
+  color: var(--blue);
+}
+
 #receipt-list {
   display: grid;
   gap: 8px;

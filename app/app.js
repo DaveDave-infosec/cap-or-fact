@@ -1073,6 +1073,19 @@ function extractLikelyProjectName(claim) {
   return fallback || "";
 }
 
+function getProjectNameTip(projectId, category) {
+  const isAutoDetect = String(projectId || "").toLowerCase() === "auto";
+  const needsDiscoveryHelp =
+    isAutoDetect ||
+    category === "founder_statement";
+
+  if (!needsDiscoveryHelp) {
+    return "";
+  }
+
+  return "Use the project's full public name when possible. For two-word brands, try the joined form too, like BotanixLabs or NoyaNetwork.";
+}
+
 function analyzeClaimQuality(claim, projectId, category) {
   const trimmedClaim = claim.trim();
   const lowerClaim = trimmedClaim.toLowerCase();
@@ -1082,6 +1095,12 @@ function analyzeClaimQuality(claim, projectId, category) {
   const guessedProjectName = detectedProject ? detectedProject.name : extractLikelyProjectName(trimmedClaim);
   const eventTerms = claimEventKeywords[category] || claimEventKeywords.airdrop_rumor;
   const issues = [];
+  const tips = [];
+  const projectNameTip = getProjectNameTip(projectId, category);
+
+  if (trimmedClaim && projectNameTip) {
+    tips.push({ text: projectNameTip });
+  }
 
   if (!trimmedClaim) {
     return {
@@ -1089,6 +1108,7 @@ function analyzeClaimQuality(claim, projectId, category) {
       label: "Waiting for claim",
       summary: "Write a clear claim, then the scout will check official sources.",
       issues: [],
+      tips: [],
       canScout: false,
     };
   }
@@ -1135,6 +1155,7 @@ function analyzeClaimQuality(claim, projectId, category) {
           critical: false,
         },
       ],
+      tips,
       canScout: false,
       likelyProjectName: guessedProjectName,
     };
@@ -1146,6 +1167,7 @@ function analyzeClaimQuality(claim, projectId, category) {
       label: "Too vague",
       summary: "Sharpen this before the scout spends time on sources.",
       issues,
+      tips,
       canScout: false,
       likelyProjectName: guessedProjectName,
     };
@@ -1157,6 +1179,7 @@ function analyzeClaimQuality(claim, projectId, category) {
       label: "Needs detail",
       summary: "The scout can run, but the verdict may be weaker unless the wording is tighter.",
       issues,
+      tips,
       canScout: true,
       likelyProjectName: guessedProjectName,
     };
@@ -1167,6 +1190,7 @@ function analyzeClaimQuality(claim, projectId, category) {
     label: "Good claim",
     summary: "Clear enough: project, event, and judgeable wording are present.",
     issues: [],
+    tips,
     canScout: true,
     likelyProjectName: guessedProjectName,
   };
@@ -1737,15 +1761,25 @@ function renderClaimQuality(quality) {
   const summary = document.querySelector("#quality-summary");
   const list = document.querySelector("#quality-list");
 
-  box.classList.remove("is-draft", "is-good", "is-review", "is-blocked");
+  box.classList.remove("is-draft", "is-good", "is-review", "is-blocked", "is-discovery");
   box.classList.add(`is-${quality.level}`);
   status.textContent = quality.label;
   summary.textContent = quality.summary;
   list.innerHTML = "";
 
-  quality.issues.forEach((issue) => {
+  const qualityItems = [
+    ...quality.issues,
+    ...(quality.tips || []).map((tip) => ({ ...tip, isTip: true })),
+  ];
+
+  qualityItems.forEach((issue) => {
     const item = document.createElement("li");
-    item.textContent = issue.text;
+    item.textContent = issue.isTip ? `Tip: ${issue.text}` : issue.text;
+
+    if (issue.isTip) {
+      item.className = "is-tip";
+    }
+
     list.append(item);
   });
 }
