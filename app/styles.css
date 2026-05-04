@@ -507,55 +507,6 @@ label {
   background: rgba(247, 201, 72, 0.08);
 }
 
-.founder-candidates {
-  display: grid;
-  gap: 8px;
-  padding-top: 2px;
-}
-
-.founder-candidates > strong {
-  color: var(--text);
-  font-size: 0.78rem;
-  text-transform: uppercase;
-}
-
-.founder-candidates > p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.78rem;
-  line-height: 1.35;
-}
-
-.founder-candidates ul {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.founder-candidates li {
-  display: grid;
-  gap: 4px;
-  padding: 9px 10px;
-  border: 1px dashed rgba(110, 168, 254, 0.36);
-  border-radius: 6px;
-  background: rgba(13, 17, 21, 0.78);
-}
-
-.founder-candidates a {
-  color: var(--text);
-  font-size: 0.82rem;
-  font-weight: 850;
-  overflow-wrap: anywhere;
-}
-
-.founder-candidates span {
-  color: var(--muted);
-  font-size: 0.76rem;
-  line-height: 1.35;
-}
-
 .advanced-rules {
   margin: 0;
 }

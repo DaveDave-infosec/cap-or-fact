@@ -1383,8 +1383,8 @@ function makeFounderScout(research, category) {
     mode = "receipt ready";
     summary = "A GenLayer-readable receipt is selected. GenLayer can judge after the contract fetches it.";
   } else if (research.xScout && research.xScout.enabled) {
-    mode = "crawler ran";
-    summary = research.xScout.status;
+    mode = "strict check";
+    summary = "No verified founder receipt found yet. Founder claims require a confirmed founder profile plus a specific post or reply.";
   } else if (hasKnownFounder) {
     mode = "founder mapped";
     summary = "Founder account is mapped. Find the exact post, reply, or quote before GenLayer judges.";
@@ -1700,11 +1700,6 @@ function renderFounderScout(research) {
   const status = document.querySelector("#founder-scout-status");
   const list = document.querySelector("#founder-scout-list");
   const scout = research.founderScout;
-  const oldCandidates = box.querySelector(".founder-candidates");
-
-  if (oldCandidates) {
-    oldCandidates.remove();
-  }
 
   if (!scout) {
     box.hidden = true;
@@ -1734,34 +1729,6 @@ function renderFounderScout(research) {
     item.append(marker, body);
     list.append(item);
   });
-
-  if (scout.candidates && scout.candidates.length > 0) {
-    const candidates = document.createElement("div");
-    const title = document.createElement("strong");
-    const helper = document.createElement("p");
-    const candidateList = document.createElement("ul");
-
-    candidates.className = "founder-candidates";
-    title.textContent = "Profile Candidates";
-    helper.textContent = "Temporary crawler tuning view. These profiles are not proof until a specific post is found.";
-
-    scout.candidates.forEach((candidate) => {
-      const item = document.createElement("li");
-      const link = document.createElement("a");
-      const note = document.createElement("span");
-
-      link.href = candidate.url;
-      link.target = "_blank";
-      link.rel = "noreferrer";
-      link.textContent = `${candidate.name || "Unknown"} @${candidate.username || "unknown"}`;
-      note.textContent = candidate.reason || "Crawler marked this as a possible profile candidate.";
-      item.append(link, note);
-      candidateList.append(item);
-    });
-
-    candidates.append(title, helper, candidateList);
-    box.append(candidates);
-  }
 }
 
 function renderClaimQuality(quality) {

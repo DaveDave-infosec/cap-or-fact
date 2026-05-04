@@ -1029,8 +1029,8 @@ function makeFounderScout(research, category) {
     mode = "receipt ready";
     summary = "A GenLayer-readable receipt is selected. GenLayer can judge after the contract fetches it.";
   } else if (research.xScout && research.xScout.enabled) {
-    mode = "crawler ran";
-    summary = research.xScout.status;
+    mode = "strict check";
+    summary = "No verified founder receipt found yet. Founder claims require a confirmed founder profile plus a specific post or reply.";
   } else if (hasKnownFounder) {
     mode = "founder mapped";
     summary = "Founder account is mapped. Find the exact post, reply, or quote before GenLayer judges.";
@@ -1922,8 +1922,8 @@ async function scoutFounderXReceipts(claim, projectName, receipts, seenUrls, pub
     status: foundReceipts.length
       ? `X crawler found ${foundReceipts.length} candidate receipt${foundReceipts.length === 1 ? "" : "s"}.`
       : foundCandidates.length
-        ? `X crawler found ${foundCandidates.length} profile candidate${foundCandidates.length === 1 ? "" : "s"}, but no exact claim post yet.`
-        : "X crawler ran, but did not find a verified founder or official post receipt yet.",
+        ? `Founder profile candidates found, but no exact post or reply receipt yet.`
+        : "No verified founder receipt found yet. Founder claims require a confirmed founder profile plus a specific post or reply.",
     candidates: foundCandidates,
     receipts: foundReceipts,
   };
