@@ -614,7 +614,7 @@ function getFounderDiscoveryProjectName(claim, projectId, quality) {
   }
 
   if (detectedProject) {
-    return detectedProject.name;
+    return "";
   }
 
   return quality.likelyProjectName || extractLikelyProjectName(claim);
