@@ -1266,6 +1266,33 @@ async function searchWeb(query, limit = 4) {
   return searchDuckDuckGo(query, limit);
 }
 
+function mergeSearchResults(resultSets, limit = 8) {
+  const seenUrls = new Set();
+  const merged = [];
+
+  resultSets.flat().forEach((result) => {
+    const normalizedUrl = String(result.url || "").replace(/\/$/, "").toLowerCase();
+
+    if (!normalizedUrl || seenUrls.has(normalizedUrl)) {
+      return;
+    }
+
+    seenUrls.add(normalizedUrl);
+    merged.push(result);
+  });
+
+  return merged.slice(0, limit);
+}
+
+async function searchFounderWeb(query, limit = 5) {
+  const [googleResults, duckDuckGoResults] = await Promise.all([
+    searchGoogleWeb(query, limit),
+    searchDuckDuckGo(query, limit),
+  ]);
+
+  return mergeSearchResults([googleResults, duckDuckGoResults], limit * 2);
+}
+
 function fetchJson(url, headers = {}, timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
     const request = https.get(
@@ -1569,7 +1596,7 @@ async function discoverFounderNameLeads(projectName) {
   const leads = new Map();
 
   for (const query of queries) {
-    const results = await searchWeb(query, 4);
+    const results = await searchFounderWeb(query, 5);
 
     results.forEach((result) => {
       const text = `${result.title || ""}. ${result.snippet || ""}`;
@@ -2050,6 +2077,15 @@ async function discoverProjectSources(claim, category, projectName, publicBaseUr
       );
     }
 
+    addDiscoveredReceipt(
+      receipts,
+      seenUrls,
+      `Google founder search for ${cleanProjectName}`,
+      `https://www.google.com/search?q=${encodeURIComponent(`${cleanProjectName} founder`)}`,
+      "search",
+      99,
+      true,
+    );
     addDiscoveredReceipt(
       receipts,
       seenUrls,
