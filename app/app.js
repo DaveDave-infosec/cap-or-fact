@@ -1356,6 +1356,11 @@ function makeFounderScout(research, category) {
   const founderLeadNames = founderNameLeads.map((lead) => lead.name).filter(Boolean);
   const hasKnownFounder = Boolean((founderReceipt && !founderReceipt.discoveryOnly) || founderPost);
   const candidateRoute = founderReceipt || founderPost || founderSearch || officialX || null;
+  const xScoutStatus = research.xScout && research.xScout.status ? research.xScout.status : "";
+  const grokScout =
+    research.xScout && research.xScout.grokScout && research.xScout.grokScout.enabled
+      ? research.xScout.grokScout
+      : null;
 
   const stages = [
     {
@@ -1413,10 +1418,12 @@ function makeFounderScout(research, category) {
     mode = "receipt ready";
     summary = "A GenLayer-readable receipt is selected. GenLayer can judge after the contract fetches it.";
   } else if (research.xScout && research.xScout.enabled) {
-    mode = "strict check";
-    summary = founderLeadNames.length
-      ? "Google found founder-name leads. X still needs to verify the matching profile and exact claim post."
-      : "No verified founder receipt found yet. Founder claims require a confirmed founder profile plus a specific post or reply.";
+    mode = grokScout ? "grok scout" : "strict check";
+    summary =
+      xScoutStatus ||
+      (founderLeadNames.length
+        ? "Google found founder-name leads. X still needs to verify the matching profile and exact claim post."
+        : "No verified founder receipt found yet. Founder claims require a confirmed founder profile plus a specific post or reply.");
   } else if (hasKnownFounder) {
     mode = "founder mapped";
     summary = "Founder account is mapped. Find the exact post, reply, or quote before GenLayer judges.";

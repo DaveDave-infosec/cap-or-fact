@@ -13,7 +13,7 @@ const GOOGLE_SEARCH_API_KEY = process.env.GOOGLE_SEARCH_API_KEY || "";
 const GOOGLE_SEARCH_CX = process.env.GOOGLE_SEARCH_CX || "";
 const XAI_API_KEY = process.env.XAI_API_KEY || "";
 const XAI_API_BASE_URL = (process.env.XAI_API_BASE_URL || "https://api.x.ai/v1").replace(/\/$/, "");
-const XAI_MODEL = process.env.XAI_MODEL || "grok-4.20";
+const XAI_MODEL = process.env.XAI_MODEL || "grok-4.20-reasoning";
 
 const projectRegistry = [
   {
@@ -1020,6 +1020,11 @@ function makeFounderScout(research, category) {
   const founderLeadNames = founderNameLeads.map((lead) => lead.name).filter(Boolean);
   const hasKnownFounder = Boolean((founderReceipt && !founderReceipt.discoveryOnly) || founderPost);
   const candidateRoute = founderReceipt || founderPost || founderSearch || officialX || null;
+  const xScoutStatus = research.xScout && research.xScout.status ? research.xScout.status : "";
+  const grokScout =
+    research.xScout && research.xScout.grokScout && research.xScout.grokScout.enabled
+      ? research.xScout.grokScout
+      : null;
 
   let mode = "x-first scout";
   let summary = "Founder claims need a verified founder or official X receipt before GenLayer judges.";
@@ -1034,10 +1039,12 @@ function makeFounderScout(research, category) {
     mode = "receipt ready";
     summary = "A GenLayer-readable receipt is selected. GenLayer can judge after the contract fetches it.";
   } else if (research.xScout && research.xScout.enabled) {
-    mode = "strict check";
-    summary = founderLeadNames.length
-      ? "Google found founder-name leads. X still needs to verify the matching profile and exact claim post."
-      : "No verified founder receipt found yet. Founder claims require a confirmed founder profile plus a specific post or reply.";
+    mode = grokScout ? "grok scout" : "strict check";
+    summary =
+      xScoutStatus ||
+      (founderLeadNames.length
+        ? "Google found founder-name leads. X still needs to verify the matching profile and exact claim post."
+        : "No verified founder receipt found yet. Founder claims require a confirmed founder profile plus a specific post or reply.");
   } else if (hasKnownFounder) {
     mode = "founder mapped";
     summary = "Founder account is mapped. Find the exact post, reply, or quote before GenLayer judges.";
@@ -1784,9 +1791,59 @@ function xaiResponseText(payload) {
     return payload.output_text;
   }
 
+  const choiceContent = payload && payload.choices && payload.choices[0] && payload.choices[0].message
+    ? payload.choices[0].message.content
+    : "";
+
+  if (typeof choiceContent === "string") {
+    return choiceContent;
+  }
+
+  if (Array.isArray(choiceContent)) {
+    return collectStringsDeep(choiceContent)
+      .filter((text) => text.trim().length > 0)
+      .join("\n");
+  }
+
   return collectStringsDeep(payload.output || [])
     .filter((text) => text.trim().length > 0)
     .join("\n");
+}
+
+function describeXaiError(error) {
+  const statusCode = error && error.statusCode;
+  let apiMessage = "";
+
+  if (error && error.responseBody) {
+    try {
+      const payload = JSON.parse(error.responseBody);
+      apiMessage =
+        (payload.error && (payload.error.message || payload.error.code)) ||
+        payload.message ||
+        payload.detail ||
+        "";
+    } catch {
+      apiMessage = String(error.responseBody || "").slice(0, 180);
+    }
+  }
+
+  if (statusCode === 401) {
+    return "Grok Scout is waiting for a valid xAI API key.";
+  }
+
+  if (statusCode === 403) {
+    return "Grok Scout is waiting for xAI X Search access or billing.";
+  }
+
+  if (statusCode === 429) {
+    return "Grok Scout hit the current xAI rate limit. Try again later.";
+  }
+
+  if (statusCode === 400 && apiMessage) {
+    return `Grok Scout request needs a settings fix: ${apiMessage}`;
+  }
+
+  return `Grok Scout could not complete: ${apiMessage || error.message}`;
 }
 
 function xaiCitationUrls(payload, outputText) {
@@ -1853,8 +1910,13 @@ Rules:
       requestUrl,
       {
         model: XAI_MODEL,
-        input: prompt,
-        tools: [{ type: "web_search" }, { type: "x_search" }],
+        input: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        tools: [{ type: "x_search" }],
       },
       {
         authorization: `Bearer ${XAI_API_KEY}`,
@@ -1945,7 +2007,7 @@ Rules:
   } catch (error) {
     return {
       enabled: true,
-      status: `Grok Scout could not complete: ${error.message}`,
+      status: describeXaiError(error),
       candidates: [],
       receipts: [],
     };
@@ -2607,7 +2669,16 @@ const server = http.createServer(async (request, response) => {
   const requestUrl = new URL(request.url, `http://${request.headers.host || "localhost"}`);
 
   if (request.method === "GET" && requestUrl.pathname === "/api/health") {
-    sendJson(response, 200, { ok: true, service: "cap-or-fact-scout" });
+    sendJson(response, 200, {
+      ok: true,
+      service: "cap-or-fact-scout",
+      integrations: {
+        googleSearch: Boolean(GOOGLE_SEARCH_API_KEY && GOOGLE_SEARCH_CX),
+        xApi: Boolean(X_BEARER_TOKEN),
+        grokScout: Boolean(XAI_API_KEY),
+        xaiModel: XAI_MODEL,
+      },
+    });
     return;
   }
 

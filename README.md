@@ -150,7 +150,7 @@ Set these Render environment variables to enable the crawler:
 ```text
 PUBLIC_BASE_URL=https://your-render-url
 XAI_API_KEY=<optional xAI API key for Grok Scout>
-XAI_MODEL=grok-4.20
+XAI_MODEL=grok-4.20-reasoning
 X_BEARER_TOKEN=<your X API bearer token>
 GOOGLE_SEARCH_API_KEY=<optional Google Custom Search API key>
 GOOGLE_SEARCH_CX=<optional Google Programmable Search Engine id>
