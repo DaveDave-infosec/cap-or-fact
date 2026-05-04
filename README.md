@@ -1,14 +1,38 @@
 # Cap or Fact
 
-A GenLayer-powered claim court for crypto rumors and internet receipts.
+Cap or Fact is a GenLayer-powered claim court for crypto rumors and public receipts.
 
-Cap or Fact lets someone enter a claim, finds an official receipt, and prepares a GenLayer case that can return:
+Live demo:
+
+```text
+https://cap-or-fact-genlayer.onrender.com/
+```
+
+GitHub:
+
+```text
+https://github.com/DaveDave-infosec/cap-or-fact
+```
+
+The app lets someone enter a claim, finds an official receipt, and prepares a GenLayer case that can return:
 
 - `FACT` - the source supports the claim.
 - `CAP` - the source contradicts the claim.
 - `UNCLEAR` - the source is not strong enough to judge.
 
 The first niche is crypto claims people argue about every day: airdrops, snapshots, token/TGE rumors, exchange listings, founder statements, partnerships, funding rounds, roadmap promises, grant deadlines, security incidents, protocol metrics, and regulatory claims.
+
+## What Is Live Now
+
+- Public app on Render.
+- Curated project registry plus live source discovery.
+- Claim quality checks before scouting.
+- Source ranking by claim type.
+- Google, X API, and Grok Scout integration for harder source hunting.
+- GenLayer Studio-tested contract proof for the Citrea demo case.
+- Builder mode for copying Studio inputs and checking the contract flow.
+
+The current app is a working builder MVP. It scouts and prepares cases, while GenLayer Studio is the proven judgment path for the current version. The next technical upgrade is a direct app-to-GenLayer transaction flow.
 
 ## Why This Fits GenLayer
 
@@ -57,6 +81,12 @@ verdict: CAP | summary: AI verdict: the fetched source contradicts the claim.
 ```
 
 That proves the core loop works: set a case, fetch an official receipt, ask the AI judge, and read the stored verdict.
+
+Public demo URL:
+
+```text
+https://cap-or-fact-genlayer.onrender.com/
+```
 
 ## How The Demo Works
 
@@ -287,6 +317,7 @@ Builder mode: https://your-render-url?builder=true
 - `docs/genlayer-studio-test.md` - plain-English Studio walkthrough.
 - `docs/beginner-guide.md` - concept guide.
 - `docs/demo-post.md` - launch post/thread copy.
+- `docs/launch-kit.md` - public launch thread, DM pitch, and demo script.
 - `docs/production-checklist.md` - final deployment and sharing checklist.
 - `examples/sample_claims.json` - sample cases.
 

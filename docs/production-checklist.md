@@ -5,6 +5,8 @@ Use this before sharing Cap or Fact publicly.
 ## App Health
 
 - Public URL opens without `?builder=true`.
+- Live URL is available at `https://cap-or-fact-genlayer.onrender.com/`.
+- `/api/health` returns `ok: true`.
 - Builder payload is hidden in public mode.
 - Logo and hero text render cleanly on desktop and mobile.
 - Claim history buttons work: back, forward, reset.
@@ -30,6 +32,15 @@ Use:
 ```text
 Start command: node server.js
 Health check path: /api/health
+```
+
+Expected health response:
+
+```text
+googleSearch: true
+xApi: true
+grokScout: true
+xaiModel: grok-4.20-reasoning
 ```
 
 ## Google Search Setup
@@ -76,3 +87,13 @@ Then test normal non-founder categories:
 - exchange listing.
 - funding/raise claim.
 - security incident.
+
+## Launch Order
+
+1. Push the latest commit to GitHub.
+2. Wait for Render to redeploy.
+3. Open `/api/health`.
+4. Test the Citrea Studio proof case.
+5. Test 3-5 normal scout cases.
+6. Post the launch thread from `docs/launch-kit.md`.
+7. Reply to the thread with screenshots and the GitHub link.
