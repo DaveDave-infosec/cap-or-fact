@@ -148,8 +148,8 @@ The automated path is:
 Set these Render environment variables to enable the crawler:
 
 ```text
-X_BEARER_TOKEN=<your X API bearer token>
 PUBLIC_BASE_URL=https://your-render-url
+X_BEARER_TOKEN=<your X API bearer token>
 GOOGLE_SEARCH_API_KEY=<optional Google Custom Search API key>
 GOOGLE_SEARCH_CX=<optional Google Programmable Search Engine id>
 ```
@@ -157,6 +157,10 @@ GOOGLE_SEARCH_CX=<optional Google Programmable Search Engine id>
 `X_API_BASE_URL` can be set if your X API provider uses a different compatible base URL.
 
 If `GOOGLE_SEARCH_API_KEY` or `GOOGLE_SEARCH_CX` is missing, the app falls back to its basic web search route. If `X_BEARER_TOKEN` is missing, the app falls back to safe X discovery routes and clearly marks them as candidates instead of evidence.
+
+Important: Google Programmable Search should be configured to search the entire web. If it is restricted to a short list of sites, founder discovery will look weaker than normal Google Search.
+
+Founder statements are intentionally strict. Google and X can discover candidates, but GenLayer only judges after the app has a real receipt URL, such as a founder post/reply gateway URL or an official project source. A `STRICT CHECK` state means the app avoided treating a search page or unverified profile as proof.
 
 Project selection is separate from Claim Type. That means a user can choose:
 
@@ -279,6 +283,7 @@ Builder mode: https://your-render-url?builder=true
 - `docs/genlayer-studio-test.md` - plain-English Studio walkthrough.
 - `docs/beginner-guide.md` - concept guide.
 - `docs/demo-post.md` - launch post/thread copy.
+- `docs/production-checklist.md` - final deployment and sharing checklist.
 - `examples/sample_claims.json` - sample cases.
 
 ## Demo Script

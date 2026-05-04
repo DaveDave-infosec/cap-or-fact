@@ -57,6 +57,18 @@ git push -u origin main
 
 Replace `YOUR_USERNAME` with your GitHub username.
 
+If you are using this workspace's custom git storage, use this push command instead:
+
+```text
+git --git-dir=git-store --work-tree=. push
+```
+
+The repo is already connected to:
+
+```text
+https://github.com/DaveDave-infosec/cap-or-fact.git
+```
+
 ## 4. Repo description
 
 Use this short description:
